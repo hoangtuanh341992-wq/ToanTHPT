@@ -1,0 +1,6 @@
+{
+  "name": "DORETA'S EXAM",
+  "description": "Hệ thống quản lý ngân hàng câu hỏi, soạn đề thi và tổ chức phòng thi trực tuyến chuẩn Bộ GD&ĐT.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

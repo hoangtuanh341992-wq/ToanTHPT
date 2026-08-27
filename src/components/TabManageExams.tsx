@@ -1,0 +1,324 @@
+import React, { useState, useRef } from 'react';
+import { Exam } from '../types';
+import {
+  FileSpreadsheet,
+  Database,
+  Users,
+  KeyRound,
+  Download,
+  Upload,
+  Plus,
+  Copy,
+  Edit3,
+  Trash2,
+  PlayCircle,
+  Clock,
+  HelpCircle,
+  Search,
+  Check,
+} from 'lucide-react';
+
+interface TabManageExamsProps {
+  exams: Exam[];
+  questionBankCount: number;
+  resultsCount: number;
+  onOpenEditExam: (exam: Exam) => void;
+  onDeleteExam: (id: string) => void;
+  onQuickStartExam: (code: string) => void;
+  onOpenPinChange: () => void;
+  onExportSystemData: () => void;
+  onImportSystemData: (file: File) => void;
+  onGoToCreate: () => void;
+  showToast: (msg: string, type?: 'info' | 'success' | 'error' | 'warning') => void;
+}
+
+export const TabManageExams: React.FC<TabManageExamsProps> = ({
+  exams,
+  questionBankCount,
+  resultsCount,
+  onOpenEditExam,
+  onDeleteExam,
+  onQuickStartExam,
+  onOpenPinChange,
+  onExportSystemData,
+  onImportSystemData,
+  onGoToCreate,
+  showToast,
+}) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [deletingExam, setDeletingExam] = useState<Exam | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const filteredExams = exams.filter(
+    (e) =>
+      e.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      e.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (e.description && e.description.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const handleCopy = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    showToast(`Đã sao chép mã đề: ${code}`, 'success');
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    onImportSystemData(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* 4 Overview Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-slate-900/90 p-5 rounded-3xl border border-slate-800 shadow-lg flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tổng Đề Thi</p>
+            <h3 className="text-2xl font-black text-indigo-400 mt-1 font-mono">{exams.length}</h3>
+          </div>
+          <div className="w-12 h-12 bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 rounded-2xl flex items-center justify-center font-bold text-xl">
+            <FileSpreadsheet className="w-6 h-6" />
+          </div>
+        </div>
+
+        <div className="bg-slate-900/90 p-5 rounded-3xl border border-slate-800 shadow-lg flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ngân Hàng Câu Hỏi</p>
+            <h3 className="text-2xl font-black text-emerald-400 mt-1 font-mono">{questionBankCount}</h3>
+          </div>
+          <div className="w-12 h-12 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-2xl flex items-center justify-center font-bold text-xl">
+            <Database className="w-6 h-6" />
+          </div>
+        </div>
+
+        <div className="bg-slate-900/90 p-5 rounded-3xl border border-slate-800 shadow-lg flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Lượt Nộp Bài</p>
+            <h3 className="text-2xl font-black text-amber-400 mt-1 font-mono">{resultsCount}</h3>
+          </div>
+          <div className="w-12 h-12 bg-amber-600/20 text-amber-400 border border-amber-500/30 rounded-2xl flex items-center justify-center font-bold text-xl">
+            <Users className="w-6 h-6" />
+          </div>
+        </div>
+
+        <div className="bg-slate-900/90 p-5 rounded-3xl border border-slate-800 shadow-lg flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Mã PIN Quản Trị</p>
+            <button
+              onClick={onOpenPinChange}
+              className="text-xs text-indigo-400 hover:text-indigo-300 font-bold mt-1 block underline"
+            >
+              Đổi mã PIN
+            </button>
+          </div>
+          <div className="w-12 h-12 bg-purple-600/20 text-purple-400 border border-purple-500/30 rounded-2xl flex items-center justify-center font-bold text-xl">
+            <KeyRound className="w-6 h-6" />
+          </div>
+        </div>
+      </div>
+
+      {/* Header Action Controls */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-900/80 p-6 rounded-3xl border border-slate-800 shadow-xl">
+        <div>
+          <h2 className="text-xl font-black text-white flex items-center gap-2">
+            <span>📁 Quản Lý Đề Thi &amp; Dữ Liệu Giáo Viên</span>
+          </h2>
+          <p className="text-xs text-slate-400 mt-1">
+            Quản lý toàn bộ danh sách đề thi đã xuất bản, sao lưu dự phòng hoặc khôi phục dữ liệu hệ thống.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={onExportSystemData}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2.5 rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 shadow-sm"
+          >
+            <Download className="w-4 h-4 text-emerald-400" />
+            <span>Sao Lưu (JSON)</span>
+          </button>
+
+          <label className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2.5 rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 shadow-sm">
+            <Upload className="w-4 h-4 text-indigo-400" />
+            <span>Khôi Phục Data</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={handleFileImport}
+            />
+          </label>
+
+          <button
+            onClick={onGoToCreate}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-md shadow-indigo-600/30 flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Soạn Đề Mới</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Search box */}
+      {exams.length > 0 && (
+        <div className="relative max-w-md">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+          <input
+            type="text"
+            placeholder="Tìm đề thi theo tên hoặc mã đề..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+          />
+        </div>
+      )}
+
+      {/* Grid of Exams */}
+      {filteredExams.length === 0 ? (
+        <div className="text-center py-16 bg-slate-900/50 rounded-3xl border border-dashed border-slate-800 space-y-3">
+          <HelpCircle className="w-10 h-10 text-slate-600 mx-auto opacity-50" />
+          <p className="text-sm font-bold text-slate-400">
+            {searchTerm ? 'Không tìm thấy đề thi nào khớp với từ khóa.' : 'Chưa có đề thi nào được xuất bản.'}
+          </p>
+          {!searchTerm && (
+            <button
+              onClick={onGoToCreate}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-md inline-flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Bắt Đầu Soạn Đề Ngay</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredExams.map((ex) => (
+            <div
+              key={ex.id}
+              className="bg-slate-900/90 rounded-3xl border border-slate-800 p-6 shadow-xl flex flex-col justify-between space-y-4 hover:border-slate-700 transition-all group"
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="bg-indigo-600/20 text-indigo-300 font-mono font-black text-xs px-3 py-1 rounded-xl border border-indigo-500/30">
+                    {ex.code}
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-400">{ex.createdAt}</span>
+                </div>
+
+                <h4 className="font-extrabold text-base text-white leading-snug group-hover:text-indigo-200 transition-colors">
+                  {ex.title}
+                </h4>
+
+                {ex.description && (
+                  <p className="text-xs text-slate-400 line-clamp-2">{ex.description}</p>
+                )}
+
+                <div className="flex items-center gap-3 text-xs font-semibold text-slate-400 pt-1">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>{ex.duration} phút</span>
+                  </span>
+                  <span>•</span>
+                  <span>{ex.questions?.length || 0} câu hỏi</span>
+                  {ex.shuffleQs && (
+                    <>
+                      <span>•</span>
+                      <span className="text-emerald-400 text-[11px]">Xáo câu</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleCopy(ex.code)}
+                    className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-2.5 rounded-xl border border-slate-700 transition-all flex items-center justify-center gap-1.5"
+                  >
+                    {copiedCode === ex.code ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400">Đã Chép</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Sao Chép Mã</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => onQuickStartExam(ex.code)}
+                    className="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/40 text-xs font-bold px-3 py-2.5 rounded-xl transition-all flex items-center gap-1"
+                    title="Vào thi thử trực tiếp"
+                  >
+                    <PlayCircle className="w-4 h-4" />
+                    <span>Thi Thử</span>
+                  </button>
+
+                  <button
+                    onClick={() => onOpenEditExam(ex)}
+                    className="bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border border-amber-800/40 text-xs font-bold p-2.5 rounded-xl transition-all"
+                    title="Chỉnh sửa đề thi"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => setDeletingExam(ex)}
+                    className="bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 text-xs font-bold p-2.5 rounded-xl transition-all"
+                    title="Xóa đề thi"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Confirm Delete Exam Modal */}
+      {deletingExam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-3xl p-6 shadow-2xl space-y-4 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-white">Xác Nhận Xóa Đề Thi?</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Bạn có chắc muốn xóa đề <strong className="text-white">"{deletingExam.title}"</strong> (Mã:{' '}
+                <span className="font-mono text-indigo-400">{deletingExam.code}</span>)? Thí sinh sẽ không thể vào thi mã đề này nữa.
+              </p>
+            </div>
+            <div className="flex items-center gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingExam(null)}
+                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2.5 rounded-xl text-xs transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteExam(deletingExam.id);
+                  setDeletingExam(null);
+                }}
+                className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-black py-2.5 rounded-xl text-xs transition-all shadow-md shadow-rose-600/30"
+              >
+                Xóa Đề Thi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
