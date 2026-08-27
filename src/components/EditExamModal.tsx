@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Exam } from '../types';
-import { Edit3, X, Clock, FileText } from 'lucide-react';
+import { exportExamToWord, exportExamToPDF } from '../utils/examExporter';
+import { Edit3, X, Clock, FileText, FileType, Printer } from 'lucide-react';
 
 interface EditExamModalProps {
   exam: Exam | null;
@@ -137,6 +138,29 @@ export const EditExamModal: React.FC<EditExamModalProps> = ({
               />
               <span>Xáo trộn các phương án đáp án</span>
             </label>
+          </div>
+
+          {/* Export options inside edit modal */}
+          <div className="pt-2 border-t border-slate-800 space-y-2">
+            <span className="text-[11px] font-bold text-slate-400 block">Tải xuống đề thi:</span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => exportExamToWord(exam, { includeAnswers: true })}
+                className="bg-blue-950/40 hover:bg-blue-900/60 text-blue-300 border border-blue-800/40 text-xs font-bold py-2.5 px-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
+              >
+                <FileType className="w-4 h-4 text-blue-400" />
+                <span>Tải Word (.doc)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => exportExamToPDF(exam)}
+                className="bg-purple-950/40 hover:bg-purple-900/60 text-purple-300 border border-purple-800/40 text-xs font-bold py-2.5 px-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
+              >
+                <Printer className="w-4 h-4 text-purple-400" />
+                <span>In / Tải PDF</span>
+              </button>
+            </div>
           </div>
 
           <div className="flex gap-2.5 pt-2">

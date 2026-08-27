@@ -48,6 +48,7 @@ export interface Exam {
 export interface ExamResult {
   id: string;
   studentName: string;
+  studentSbd?: string; // Số báo danh thí sinh
   studentClass: string;
   examCode: string;
   examTitle: string;
@@ -56,6 +57,16 @@ export interface ExamResult {
   submittedAt: string;
   durationSpentSeconds?: number;
   answers?: Record<string, any>;
+  scoreBreakdown?: {
+    part1Earned?: number;
+    part1Max?: number;
+    part2Earned?: number;
+    part2Max?: number;
+    part3Earned?: number;
+    part3Max?: number;
+    part4Earned?: number;
+    part4Max?: number;
+  };
 }
 
 export interface ToastMessage {

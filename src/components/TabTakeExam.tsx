@@ -26,6 +26,7 @@ import {
   X,
   AlertCircle,
   ShieldAlert,
+  IdCard,
 } from 'lucide-react';
 
 interface TabTakeExamProps {
@@ -46,6 +47,7 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
   // Entry states
   const [examCode, setExamCode] = useState('');
   const [studentName, setStudentName] = useState('');
+  const [studentSbd, setStudentSbd] = useState('');
   const [studentClass, setStudentClass] = useState('');
 
   // Active exam states
@@ -89,6 +91,7 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
         setExamStartTime(savedSession.examStartTime || Date.now());
         setTabSwitchCount(savedSession.tabSwitchCount || 0);
         setStudentName(savedSession.studentName || '');
+        setStudentSbd(savedSession.studentSbd || '');
         setStudentClass(savedSession.studentClass || '');
         setExamCode(savedSession.examCode || '');
         showToast(
@@ -112,6 +115,7 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
         examStartTime,
         tabSwitchCount,
         studentName,
+        studentSbd,
         studentClass,
         examCode,
         savedTimestamp: Date.now(),
@@ -126,6 +130,7 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
     examStartTime,
     tabSwitchCount,
     studentName,
+    studentSbd,
     studentClass,
     examCode,
   ]);
@@ -297,9 +302,23 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
         Math.round((Date.now() - examStartTime) / 1000)
       );
 
+      // Extract part scores for breakdown reporting
+      const part1Earned = Math.round(breakdown.partDetails.filter((p) => p.type === 'mc').reduce((sum, p) => sum + p.earned, 0) * 100) / 100;
+      const part1Max = Math.round(breakdown.partDetails.filter((p) => p.type === 'mc').reduce((sum, p) => sum + p.max, 0) * 100) / 100;
+
+      const part2Earned = Math.round(breakdown.partDetails.filter((p) => p.type === 'tf').reduce((sum, p) => sum + p.earned, 0) * 100) / 100;
+      const part2Max = Math.round(breakdown.partDetails.filter((p) => p.type === 'tf').reduce((sum, p) => sum + p.max, 0) * 100) / 100;
+
+      const part3Earned = Math.round(breakdown.partDetails.filter((p) => p.type === 'short').reduce((sum, p) => sum + p.earned, 0) * 100) / 100;
+      const part3Max = Math.round(breakdown.partDetails.filter((p) => p.type === 'short').reduce((sum, p) => sum + p.max, 0) * 100) / 100;
+
+      const part4Earned = Math.round(breakdown.partDetails.filter((p) => p.type === 'essay').reduce((sum, p) => sum + p.earned, 0) * 100) / 100;
+      const part4Max = Math.round(breakdown.partDetails.filter((p) => p.type === 'essay').reduce((sum, p) => sum + p.max, 0) * 100) / 100;
+
       const resultEntry: ExamResult = {
         id: 'res-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
         studentName: studentName.trim() || 'Học sinh',
+        studentSbd: studentSbd.trim() || undefined,
         studentClass: studentClass.trim() || 'Tự do',
         examCode: activeExam.code,
         examTitle: activeExam.title,
@@ -308,6 +327,16 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
         submittedAt: new Date().toLocaleString('vi-VN'),
         durationSpentSeconds: spentSeconds,
         answers: { ...activeAnswers },
+        scoreBreakdown: {
+          part1Earned,
+          part1Max,
+          part2Earned,
+          part2Max,
+          part3Earned,
+          part3Max,
+          part4Earned,
+          part4Max,
+        },
       };
 
       onExamSubmitted(resultEntry);
@@ -331,6 +360,7 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
       const resultEntry: ExamResult = {
         id: 'res-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
         studentName: studentName.trim() || 'Học sinh',
+        studentSbd: studentSbd.trim() || undefined,
         studentClass: studentClass.trim() || 'Tự do',
         examCode: activeExam.code,
         examTitle: activeExam.title,
@@ -437,8 +467,13 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
           </span>
           <h3 className="text-2xl font-black text-white mt-2">{result.examTitle}</h3>
           <p className="text-xs text-slate-400 mt-1">
-            Thí sinh: <strong className="text-white">{result.studentName}</strong> • Lớp:{' '}
-            <strong className="text-white">{result.studentClass}</strong>
+            Thí sinh: <strong className="text-white">{result.studentName}</strong>
+            {result.studentSbd && (
+              <>
+                {' '}• SBD: <strong className="text-indigo-400 font-mono">{result.studentSbd}</strong>
+              </>
+            )}
+            {' '}• Lớp: <strong className="text-white">{result.studentClass}</strong>
           </p>
         </div>
 
@@ -590,8 +625,13 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
                 <h3 className="font-extrabold text-sm sm:text-base text-white">{activeExam.title}</h3>
               </div>
               <p className="text-xs text-slate-400 font-semibold">
-                Thí sinh: <span className="text-slate-200 font-bold">{studentName}</span> • Lớp:{' '}
-                <span className="text-slate-200 font-bold">{studentClass || 'Tự do'}</span>
+                Thí sinh: <span className="text-slate-200 font-bold">{studentName}</span>
+                {studentSbd && (
+                  <>
+                    {' '}• SBD: <span className="text-indigo-400 font-mono font-bold">{studentSbd}</span>
+                  </>
+                )}
+                {' '}• Lớp: <span className="text-slate-200 font-bold">{studentClass || 'Tự do'}</span>
               </p>
             </div>
 
@@ -1016,6 +1056,21 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
               onChange={(e) => setStudentName(e.target.value)}
               placeholder="Ví dụ: Nguyễn Văn A"
               className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3.5 text-sm text-white font-semibold focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+              <IdCard className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Số Báo Danh (SBD) *</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={studentSbd}
+              onChange={(e) => setStudentSbd(e.target.value.toUpperCase())}
+              placeholder="Ví dụ: SBD-00125 hoặc 1205"
+              className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3.5 text-sm text-white font-mono font-bold focus:outline-none focus:border-indigo-500 uppercase tracking-wider"
             />
           </div>
 

@@ -66,6 +66,7 @@ export interface ActiveExamSession {
   examStartTime: number;
   tabSwitchCount: number;
   studentName: string;
+  studentSbd?: string; // Số báo danh
   studentClass: string;
   examCode: string;
   savedTimestamp: number;

@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Exam } from '../types';
+import { exportExamToWord, exportExamToPDF } from '../utils/examExporter';
 import {
   FileSpreadsheet,
   Database,
@@ -16,6 +17,9 @@ import {
   HelpCircle,
   Search,
   Check,
+  FileType,
+  FileText,
+  Printer,
 } from 'lucide-react';
 
 interface TabManageExamsProps {
@@ -233,7 +237,34 @@ export const TabManageExams: React.FC<TabManageExamsProps> = ({
                 </div>
               </div>
 
-              <div className="space-y-2 pt-2 border-t border-slate-800/80">
+              <div className="space-y-2.5 pt-2 border-t border-slate-800/80">
+                {/* Download Word & PDF Row */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      exportExamToWord(ex, { includeAnswers: true });
+                      showToast(`Đã xuất đề "${ex.title}" sang file Word (.doc)!`, 'success');
+                    }}
+                    className="bg-blue-950/50 hover:bg-blue-900/70 text-blue-300 border border-blue-800/40 text-[11px] font-bold py-2 px-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                    title="Tải đề thi dạng file Word (hỗ trợ MathJax, Katex, LaTeX và bảng đáp án)"
+                  >
+                    <FileType className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Tải Word (.doc)</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      exportExamToPDF(ex);
+                      showToast(`Đang mở giao diện in / lưu PDF đề "${ex.title}"...`, 'info');
+                    }}
+                    className="bg-purple-950/50 hover:bg-purple-900/70 text-purple-300 border border-purple-800/40 text-[11px] font-bold py-2 px-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                    title="In đề thi hoặc lưu thành file PDF chuẩn A4"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-purple-400" />
+                    <span>In / Tải PDF</span>
+                  </button>
+                </div>
+
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleCopy(ex.code)}

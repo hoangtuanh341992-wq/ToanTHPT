@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ExamResult } from '../types';
+import { exportResultsToExcel } from '../utils/examExporter';
 import {
   FileSpreadsheet,
   Download,
@@ -9,6 +10,8 @@ import {
   Award,
   TrendingUp,
   AlertTriangle,
+  FileText,
+  IdCard,
 } from 'lucide-react';
 
 interface TabResultsProps {
@@ -30,11 +33,13 @@ export const TabResults: React.FC<TabResultsProps> = ({
   const [deletingResultId, setDeletingResultId] = useState<string | null>(null);
 
   const filteredResults = results.filter((r) => {
+    const term = searchTerm.toLowerCase();
     const matchesSearch =
-      r.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.studentClass.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.examCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (r.examTitle && r.examTitle.toLowerCase().includes(searchTerm.toLowerCase()));
+      r.studentName.toLowerCase().includes(term) ||
+      (r.studentSbd && r.studentSbd.toLowerCase().includes(term)) ||
+      r.studentClass.toLowerCase().includes(term) ||
+      r.examCode.toLowerCase().includes(term) ||
+      (r.examTitle && r.examTitle.toLowerCase().includes(term));
 
     const matchesExam = selectedExamFilter === 'all' || r.examCode === selectedExamFilter;
 
@@ -57,17 +62,30 @@ export const TabResults: React.FC<TabResultsProps> = ({
   const passRate =
     totalSubmissions > 0 ? Math.round((passCount / totalSubmissions) * 100) : 0;
 
-  const exportCSV = () => {
+  const handleExportExcel = () => {
+    try {
+      if (results.length === 0) {
+        showToast('Không có dữ liệu bài nộp để xuất tệp Excel!', 'error');
+        return;
+      }
+      exportResultsToExcel(filteredResults.length > 0 ? filteredResults : results);
+      showToast('Đã xuất báo cáo Excel (.xlsx) chuẩn số liệu thành công!', 'success');
+    } catch (err: any) {
+      console.error('Export Excel error:', err);
+      showToast('Lỗi khi xuất tệp Excel: ' + (err?.message || 'Không xác định'), 'error');
+    }
+  };
+
+  const handleExportCSV = () => {
     if (results.length === 0) {
       showToast('Không có dữ liệu bài nộp để xuất tệp CSV!', 'error');
       return;
     }
 
-    let csv = '\uFEFFHọ Và Tên,Lớp,Mã Đề,Tên Đề,Thời Gian Nộp,Số Lần Đổi Tab,Điểm Số\n';
-    results.forEach((r) => {
-      csv += `"${r.studentName}","${r.studentClass}","${r.examCode}","${r.examTitle || ''}","${
-        r.submittedAt
-      }",${r.tabSwitchCount || 0},${r.score}\n`;
+    const exportList = filteredResults.length > 0 ? filteredResults : results;
+    let csv = '\uFEFFSTT,Số Báo Danh,Họ Và Tên,Lớp / Trường,Mã Đề,Tên Đề,Điểm Tổng,Phần I,Phần II,Phần III,Thời Gian Nộp,Số Lần Đổi Tab\n';
+    exportList.forEach((r, idx) => {
+      csv += `${idx + 1},"${r.studentSbd || ''}","${r.studentName}","${r.studentClass}","${r.examCode}","${r.examTitle || ''}",${r.score},${r.scoreBreakdown?.part1Earned || ''},${r.scoreBreakdown?.part2Earned || ''},${r.scoreBreakdown?.part3Earned || ''},"${r.submittedAt}",${r.tabSwitchCount || 0}\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -85,17 +103,17 @@ export const TabResults: React.FC<TabResultsProps> = ({
       <div className="bg-slate-900/80 p-6 rounded-3xl border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xl">
         <div>
           <h2 className="text-xl font-black text-white flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
+            <span className="p-2 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
               <FileSpreadsheet className="w-5 h-5" />
             </span>
             <span>Báo Cáo &amp; Phổ Điểm Kết Quả</span>
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Thống kê điểm số học sinh, số lần vi phạm rời tab và xuất tệp CSV/Excel.
+            Thống kê chi tiết điểm số, số báo danh học sinh, vi phạm rời tab và xuất file Excel chuẩn.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           {results.length > 0 && (
             <button
               onClick={() => setConfirmClearAll(true)}
@@ -107,11 +125,21 @@ export const TabResults: React.FC<TabResultsProps> = ({
           )}
 
           <button
-            onClick={exportCSV}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md shadow-emerald-600/30 flex items-center gap-2"
+            onClick={handleExportExcel}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs px-4 py-2.5 rounded-xl transition-all shadow-md shadow-emerald-600/30 flex items-center gap-2"
+            title="Xuất file Microsoft Excel (.xlsx) với mỗi thông tin một cột chuẩn số liệu"
           >
-            <Download className="w-4 h-4" />
-            <span>Xuất File Báo Cáo (CSV)</span>
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Xuất Báo Cáo Excel (.xlsx)</span>
+          </button>
+
+          <button
+            onClick={handleExportCSV}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all border border-slate-700 flex items-center gap-1.5"
+            title="Xuất tệp CSV phụ trợ"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>CSV</span>
           </button>
         </div>
       </div>
@@ -168,7 +196,7 @@ export const TabResults: React.FC<TabResultsProps> = ({
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
             <input
               type="text"
-              placeholder="Tìm kiếm học sinh, lớp, mã đề..."
+              placeholder="Tìm kiếm theo họ tên, số báo danh (SBD), lớp, mã đề..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
@@ -198,8 +226,10 @@ export const TabResults: React.FC<TabResultsProps> = ({
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-950 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-800">
               <tr>
+                <th className="p-4">STT</th>
+                <th className="p-4">Số Báo Danh (SBD)</th>
                 <th className="p-4">Họ Và Tên</th>
-                <th className="p-4">Lớp</th>
+                <th className="p-4">Lớp / Trường</th>
                 <th className="p-4">Mã Đề</th>
                 <th className="p-4">Thời Gian Nộp</th>
                 <th className="p-4 text-center">Đổi Tab</th>
@@ -210,15 +240,23 @@ export const TabResults: React.FC<TabResultsProps> = ({
             <tbody className="divide-y divide-slate-800/60 font-semibold text-slate-200">
               {filteredResults.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-12 text-center text-slate-500 font-bold">
+                  <td colSpan={9} className="p-12 text-center text-slate-500 font-bold">
                     {searchTerm
                       ? 'Không tìm thấy kết quả phù hợp.'
                       : 'Chưa có kết quả bài nộp nào trong hệ thống.'}
                   </td>
                 </tr>
               ) : (
-                filteredResults.map((r) => (
+                filteredResults.map((r, index) => (
                   <tr key={r.id} className="hover:bg-slate-800/40 transition-colors">
+                    <td className="p-4 text-slate-500 font-mono font-bold text-center">
+                      {index + 1}
+                    </td>
+                    <td className="p-4 font-mono font-bold text-indigo-300">
+                      <span className="bg-indigo-950/60 border border-indigo-500/30 px-2.5 py-1 rounded-lg">
+                        {r.studentSbd || 'SBD-' + String(index + 1).padStart(3, '0')}
+                      </span>
+                    </td>
                     <td className="p-4 font-bold text-white flex items-center gap-2">
                       <div className="w-7 h-7 rounded-full bg-indigo-600/20 text-indigo-300 flex items-center justify-center font-black text-xs">
                         {r.studentName.charAt(0).toUpperCase()}
