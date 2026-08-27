@@ -1,6 +1,12 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Question, QuestionType, QuestionLevel } from '../types';
 import { MathText } from '../utils/mathRenderer';
+import {
+  STORAGE_KEYS,
+  getStorageItem,
+  setStorageItem,
+  removeStorageItem,
+} from '../utils/storage';
 import {
   FileText,
   Sparkles,
@@ -39,55 +45,128 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
   editingDraftIndex,
   setEditingDraftIndex,
 }) => {
-  const [createMode, setCreateMode] = useState<'form' | 'raw'>('form');
+  // Load saved draft form if available (prevents loss on reload or network drops)
+  const savedDraftForm = getStorageItem<any>(STORAGE_KEYS.DRAFT_FORM, null);
+
+  const [createMode, setCreateMode] = useState<'form' | 'raw'>(() => {
+    return savedDraftForm?.createMode || 'form';
+  });
 
   // Form states
-  const [currentFmType, setCurrentFmType] = useState<QuestionType>('mc');
-  const [fmGrade, setFmGrade] = useState<'10' | '11' | '12'>('12');
-  const [fmLevel, setFmLevel] = useState<QuestionLevel>('Nhận biết');
-  const [fmTopic, setFmTopic] = useState('Hàm số & Đồ thị');
-  const [fmStem, setFmStem] = useState('');
-  const [fmImage, setFmImage] = useState<string | null>(null);
-  const [fmContent, setFmContent] = useState('');
+  const [currentFmType, setCurrentFmType] = useState<QuestionType>(() => {
+    return savedDraftForm?.currentFmType || 'mc';
+  });
+  const [fmGrade, setFmGrade] = useState<'10' | '11' | '12'>(() => {
+    return savedDraftForm?.fmGrade || '12';
+  });
+  const [fmLevel, setFmLevel] = useState<QuestionLevel>(() => {
+    return savedDraftForm?.fmLevel || 'Nhận biết';
+  });
+  const [fmTopic, setFmTopic] = useState<string>(() => {
+    return savedDraftForm?.fmTopic || 'Hàm số & Đồ thị';
+  });
+  const [fmStem, setFmStem] = useState<string>(() => {
+    return savedDraftForm?.fmStem || '';
+  });
+  const [fmImage, setFmImage] = useState<string | null>(() => {
+    return savedDraftForm?.fmImage || null;
+  });
+  const [fmContent, setFmContent] = useState<string>(() => {
+    return savedDraftForm?.fmContent || '';
+  });
 
   // MC Options
-  const [fmMcOptions, setFmMcOptions] = useState({
-    A: '',
-    B: '',
-    C: '',
-    D: '',
+  const [fmMcOptions, setFmMcOptions] = useState(() => {
+    return savedDraftForm?.fmMcOptions || {
+      A: '',
+      B: '',
+      C: '',
+      D: '',
+    };
   });
-  const [fmMcCorrect, setFmMcCorrect] = useState<'A' | 'B' | 'C' | 'D'>('A');
+  const [fmMcCorrect, setFmMcCorrect] = useState<'A' | 'B' | 'C' | 'D'>(() => {
+    return savedDraftForm?.fmMcCorrect || 'A';
+  });
 
   // TF Statements
-  const [fmTfStatements, setFmTfStatements] = useState({
-    a: '',
-    b: '',
-    c: '',
-    d: '',
+  const [fmTfStatements, setFmTfStatements] = useState(() => {
+    return savedDraftForm?.fmTfStatements || {
+      a: '',
+      b: '',
+      c: '',
+      d: '',
+    };
   });
   const [fmTfCorrects, setFmTfCorrects] = useState<{
     a: 'true' | 'false';
     b: 'true' | 'false';
     c: 'true' | 'false';
     d: 'true' | 'false';
-  }>({
-    a: 'true',
-    b: 'true',
-    c: 'true',
-    d: 'false',
+  }>(() => {
+    return savedDraftForm?.fmTfCorrects || {
+      a: 'true',
+      b: 'true',
+      c: 'true',
+      d: 'false',
+    };
   });
 
   // Short answer
-  const [fmShortAnswer, setFmShortAnswer] = useState('');
+  const [fmShortAnswer, setFmShortAnswer] = useState<string>(() => {
+    return savedDraftForm?.fmShortAnswer || '';
+  });
 
   // Essay guide
-  const [fmEssayGuide, setFmEssayGuide] = useState('');
+  const [fmEssayGuide, setFmEssayGuide] = useState<string>(() => {
+    return savedDraftForm?.fmEssayGuide || '';
+  });
 
   // Raw text state
-  const [rawText, setRawText] = useState('');
+  const [rawText, setRawText] = useState<string>(() => {
+    return savedDraftForm?.rawText || '';
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-save form draft so reloading or network cuts never lose work
+  useEffect(() => {
+    if (editingDraftIndex === -1) {
+      setStorageItem(STORAGE_KEYS.DRAFT_FORM, {
+        createMode,
+        currentFmType,
+        fmGrade,
+        fmLevel,
+        fmTopic,
+        fmStem,
+        fmImage,
+        fmContent,
+        fmMcOptions,
+        fmMcCorrect,
+        fmTfStatements,
+        fmTfCorrects,
+        fmShortAnswer,
+        fmEssayGuide,
+        rawText,
+      });
+    }
+  }, [
+    createMode,
+    currentFmType,
+    fmGrade,
+    fmLevel,
+    fmTopic,
+    fmStem,
+    fmImage,
+    fmContent,
+    fmMcOptions,
+    fmMcCorrect,
+    fmTfStatements,
+    fmTfCorrects,
+    fmShortAnswer,
+    fmEssayGuide,
+    rawText,
+    editingDraftIndex,
+  ]);
 
   const resetForm = () => {
     setFmStem('');
@@ -99,7 +178,9 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
     setFmTfCorrects({ a: 'true', b: 'true', c: 'true', d: 'false' });
     setFmShortAnswer('');
     setFmEssayGuide('');
+    setRawText('');
     setEditingDraftIndex(-1);
+    removeStorageItem(STORAGE_KEYS.DRAFT_FORM);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 

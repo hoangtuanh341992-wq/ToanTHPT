@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Exam, ExamResult, Question, ToastMessage } from './types';
 import { initialExams, initialQuestionBank } from './data/sampleData';
+import {
+  STORAGE_KEYS,
+  getStorageItem,
+  setStorageItem,
+} from './utils/storage';
 import { Header } from './components/Header';
 import { TabTakeExam } from './components/TabTakeExam';
 import { TabCreateExam } from './components/TabCreateExam';
@@ -15,9 +20,11 @@ import { ToastContainer } from './components/ToastContainer';
 export default function App() {
   // Navigation & Role State
   const [currentTab, setCurrentTab] = useState<'take' | 'create' | 'manage' | 'results'>('take');
-  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    return getStorageItem<boolean>(STORAGE_KEYS.IS_ADMIN, false);
+  });
   const [systemPin, setSystemPin] = useState<string>(() => {
-    return localStorage.getItem('doreta_pin') || '123456';
+    return getStorageItem<string>(STORAGE_KEYS.PIN, '123456');
   });
 
   // Modal States
@@ -29,32 +36,27 @@ export default function App() {
 
   // Data States with LocalStorage Persistence
   const [questionBank, setQuestionBank] = useState<Question[]>(() => {
-    try {
-      const stored = localStorage.getItem('doreta_qbank');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return initialQuestionBank;
+    return getStorageItem<Question[]>(STORAGE_KEYS.QBANK, initialQuestionBank);
   });
 
   const [exams, setExams] = useState<Exam[]>(() => {
-    try {
-      const stored = localStorage.getItem('doreta_exams');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return initialExams;
+    return getStorageItem<Exam[]>(STORAGE_KEYS.EXAMS, initialExams);
   });
 
   const [results, setResults] = useState<ExamResult[]>(() => {
-    try {
-      const stored = localStorage.getItem('doreta_results');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return [];
+    return getStorageItem<ExamResult[]>(STORAGE_KEYS.RESULTS, []);
   });
 
-  // Authoring Draft State
-  const [draftingQuestions, setDraftingQuestions] = useState<Question[]>([]);
+  // Authoring Draft State (now fully persisted!)
+  const [draftingQuestions, setDraftingQuestions] = useState<Question[]>(() => {
+    return getStorageItem<Question[]>(STORAGE_KEYS.DRAFT_QUESTIONS, []);
+  });
   const [editingDraftIndex, setEditingDraftIndex] = useState<number>(-1);
+
+  // Network Status
+  const [isOnline, setIsOnline] = useState<boolean>(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
 
   // Preset code for taking exam
   const [presetExamCode, setPresetExamCode] = useState<string | null>(null);
@@ -62,22 +64,82 @@ export default function App() {
   // Toast notifications
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  // Synchronize localStorage
+  // Synchronize localStorage reliably
   useEffect(() => {
-    localStorage.setItem('doreta_qbank', JSON.stringify(questionBank));
+    setStorageItem(STORAGE_KEYS.QBANK, questionBank);
   }, [questionBank]);
 
   useEffect(() => {
-    localStorage.setItem('doreta_exams', JSON.stringify(exams));
+    setStorageItem(STORAGE_KEYS.EXAMS, exams);
   }, [exams]);
 
   useEffect(() => {
-    localStorage.setItem('doreta_results', JSON.stringify(results));
+    setStorageItem(STORAGE_KEYS.RESULTS, results);
   }, [results]);
 
   useEffect(() => {
-    localStorage.setItem('doreta_pin', systemPin);
+    setStorageItem(STORAGE_KEYS.DRAFT_QUESTIONS, draftingQuestions);
+  }, [draftingQuestions]);
+
+  useEffect(() => {
+    setStorageItem(STORAGE_KEYS.PIN, systemPin);
   }, [systemPin]);
+
+  useEffect(() => {
+    setStorageItem(STORAGE_KEYS.IS_ADMIN, isAdmin);
+  }, [isAdmin]);
+
+  // Network online/offline event listeners
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      showToast('Đã kết nối Internet trở lại!', 'success');
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      showToast(
+        'Đang ở chế độ Ngoại Tuyến (Offline): Toàn bộ dữ liệu được lưu an toàn trên máy của bạn.',
+        'info'
+      );
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Multi-tab sync listener
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEYS.EXAMS && e.newValue) {
+        try {
+          setExams(JSON.parse(e.newValue));
+        } catch {}
+      }
+      if (e.key === STORAGE_KEYS.QBANK && e.newValue) {
+        try {
+          setQuestionBank(JSON.parse(e.newValue));
+        } catch {}
+      }
+      if (e.key === STORAGE_KEYS.RESULTS && e.newValue) {
+        try {
+          setResults(JSON.parse(e.newValue));
+        } catch {}
+      }
+      if (e.key === STORAGE_KEYS.DRAFT_QUESTIONS && e.newValue) {
+        try {
+          setDraftingQuestions(JSON.parse(e.newValue));
+        } catch {}
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   const showToast = (
     message: string,
@@ -255,6 +317,7 @@ export default function App() {
         onToggleAdmin={handleToggleAdmin}
         bankCount={questionBank.length}
         onOpenBank={handleOpenBank}
+        isOnline={isOnline}
       />
 
       {/* Main Content Area */}

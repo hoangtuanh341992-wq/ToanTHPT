@@ -1,5 +1,5 @@
 import React from 'react';
-import { Database, Lock, GraduationCap, UserCheck } from 'lucide-react';
+import { Database, Lock, GraduationCap, UserCheck, Wifi, WifiOff, ShieldCheck } from 'lucide-react';
 
 interface HeaderProps {
   currentTab: string;
@@ -8,6 +8,7 @@ interface HeaderProps {
   onToggleAdmin: () => void;
   bankCount: number;
   onOpenBank: () => void;
+  isOnline?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -17,6 +18,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleAdmin,
   bankCount,
   onOpenBank,
+  isOnline = true,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-slate-900/90 border-b border-slate-800/80 backdrop-blur-md">
@@ -30,9 +32,22 @@ export const Header: React.FC<HeaderProps> = ({
             D
           </div>
           <div>
-            <h1 className="font-extrabold text-lg bg-gradient-to-r from-indigo-300 via-indigo-100 to-purple-300 bg-clip-text text-transparent tracking-tight">
-              DORETA&apos;S EXAM
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-extrabold text-lg bg-gradient-to-r from-indigo-300 via-indigo-100 to-purple-300 bg-clip-text text-transparent tracking-tight">
+                DORETA&apos;S EXAM
+              </h1>
+              {!isOnline ? (
+                <span className="inline-flex items-center gap-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  <WifiOff className="w-2.5 h-2.5" />
+                  <span>Ngoại tuyến</span>
+                </span>
+              ) : (
+                <span className="hidden lg:inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-medium px-2 py-0.5 rounded-full" title="Tất cả dữ liệu được tự động lưu cục bộ an toàn, không lo mất mạng">
+                  <ShieldCheck className="w-2.5 h-2.5 text-emerald-400" />
+                  <span>Lưu Cục Bộ Tự Động</span>
+                </span>
+              )}
+            </div>
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest hidden sm:block">
               Hệ Thống Quản Lý &amp; Thi Trực Tuyến
             </p>

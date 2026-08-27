@@ -2,6 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Exam, ExamResult, Question } from '../types';
 import { MathText } from '../utils/mathRenderer';
 import { calculateMOETScore, ScoreBreakdown } from '../utils/scoring';
+import {
+  STORAGE_KEYS,
+  getStorageItem,
+  setStorageItem,
+  removeStorageItem,
+  ActiveExamSession,
+} from '../utils/storage';
 import confetti from 'canvas-confetti';
 import {
   PenTool,
@@ -18,6 +25,7 @@ import {
   CheckCircle2,
   X,
   AlertCircle,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface TabTakeExamProps {
@@ -58,6 +66,85 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
   const [isConfirmSubmitOpen, setIsConfirmSubmitOpen] = useState(false);
 
   const timerRef = useRef<any>(null);
+
+  // Restore unfinished active exam session upon page reload / reconnect
+  useEffect(() => {
+    const savedSession = getStorageItem<ActiveExamSession | null>(
+      STORAGE_KEYS.ACTIVE_SESSION,
+      null
+    );
+
+    if (savedSession && savedSession.exam && !activeExam) {
+      const elapsedSeconds = Math.max(
+        0,
+        Math.floor((Date.now() - savedSession.savedTimestamp) / 1000)
+      );
+      const remaining = Math.max(0, savedSession.secondsLeft - elapsedSeconds);
+
+      if (remaining > 0) {
+        setActiveExam(savedSession.exam);
+        setActiveQuestions(savedSession.questions || []);
+        setActiveAnswers(savedSession.answers || {});
+        setSecondsLeft(remaining);
+        setExamStartTime(savedSession.examStartTime || Date.now());
+        setTabSwitchCount(savedSession.tabSwitchCount || 0);
+        setStudentName(savedSession.studentName || '');
+        setStudentClass(savedSession.studentClass || '');
+        setExamCode(savedSession.examCode || '');
+        showToast(
+          `Đã khôi phục bài thi đang làm dở của thí sinh "${savedSession.studentName}"!`,
+          'success'
+        );
+      } else {
+        removeStorageItem(STORAGE_KEYS.ACTIVE_SESSION);
+      }
+    }
+  }, []);
+
+  // Continuously sync active exam session to storage
+  useEffect(() => {
+    if (activeExam) {
+      const session: ActiveExamSession = {
+        exam: activeExam,
+        questions: activeQuestions,
+        answers: activeAnswers,
+        secondsLeft,
+        examStartTime,
+        tabSwitchCount,
+        studentName,
+        studentClass,
+        examCode,
+        savedTimestamp: Date.now(),
+      };
+      setStorageItem(STORAGE_KEYS.ACTIVE_SESSION, session);
+    }
+  }, [
+    activeExam,
+    activeQuestions,
+    activeAnswers,
+    secondsLeft,
+    examStartTime,
+    tabSwitchCount,
+    studentName,
+    studentClass,
+    examCode,
+  ]);
+
+  // Warn before closing tab or navigating away during active exam
+  useEffect(() => {
+    if (!activeExam) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = 'Bạn đang trong quá trình làm bài thi. Toàn bộ câu trả lời đã được lưu trữ tự động.';
+      return e.returnValue;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [activeExam]);
 
   // Handle preset exam code (e.g. from manage tab "Thi Thử")
   useEffect(() => {
@@ -266,6 +353,7 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
       showToast('Đã ghi nhận bài nộp của bạn!', 'success');
     }
 
+    removeStorageItem(STORAGE_KEYS.ACTIVE_SESSION);
     setActiveExam(null);
     setActiveQuestions([]);
     setActiveAnswers({});
