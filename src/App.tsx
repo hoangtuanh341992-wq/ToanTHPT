@@ -6,6 +6,20 @@ import {
   getStorageItem,
   setStorageItem,
 } from './utils/storage';
+import {
+  fetchSystemPin,
+  updateSystemPin,
+  subscribeSystemPin,
+  subscribeExams,
+  saveExamToCloud,
+  deleteExamFromCloud,
+  subscribeQuestionBank,
+  saveQuestionToCloud,
+  deleteQuestionFromCloud,
+  subscribeExamResults,
+  submitExamResultToCloud,
+  deleteExamResultFromCloud,
+} from './lib/firebase';
 import { Header } from './components/Header';
 import { TabTakeExam } from './components/TabTakeExam';
 import { TabCreateExam } from './components/TabCreateExam';
@@ -34,7 +48,7 @@ export default function App() {
   const [isPublishOpen, setIsPublishOpen] = useState(false);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
 
-  // Data States with LocalStorage Persistence
+  // Data States with LocalStorage Cache + Cloud Firestore Sync
   const [questionBank, setQuestionBank] = useState<Question[]>(() => {
     return getStorageItem<Question[]>(STORAGE_KEYS.QBANK, initialQuestionBank);
   });
@@ -64,7 +78,7 @@ export default function App() {
   // Toast notifications
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  // Synchronize localStorage reliably
+  // Synchronize localStorage reliably as local cache
   useEffect(() => {
     setStorageItem(STORAGE_KEYS.QBANK, questionBank);
   }, [questionBank]);
@@ -89,11 +103,54 @@ export default function App() {
     setStorageItem(STORAGE_KEYS.IS_ADMIN, isAdmin);
   }, [isAdmin]);
 
+  // Firebase Real-Time Cloud Listeners (Subscribes to Exams, Bank, Results, PIN)
+  useEffect(() => {
+    // 1. Subscribe to Cloud PIN
+    const unsubPin = subscribeSystemPin((cloudPin) => {
+      if (cloudPin && cloudPin !== systemPin) {
+        setSystemPin(cloudPin);
+      }
+    });
+
+    // 2. Subscribe to Cloud Exams
+    const unsubExams = subscribeExams((cloudExams) => {
+      if (cloudExams && Array.isArray(cloudExams)) {
+        setExams(cloudExams);
+      }
+    });
+
+    // 3. Subscribe to Cloud Question Bank
+    const unsubBank = subscribeQuestionBank((cloudBank) => {
+      if (cloudBank && Array.isArray(cloudBank)) {
+        setQuestionBank(cloudBank);
+      }
+    });
+
+    // 4. Subscribe to Cloud Exam Results (Real-time student submissions)
+    const unsubResults = subscribeExamResults((cloudResults) => {
+      if (cloudResults && Array.isArray(cloudResults)) {
+        setResults(cloudResults);
+      }
+    });
+
+    // Initial PIN fetch
+    fetchSystemPin().then((pin) => {
+      if (pin) setSystemPin(pin);
+    });
+
+    return () => {
+      unsubPin();
+      unsubExams();
+      unsubBank();
+      unsubResults();
+    };
+  }, []);
+
   // Network online/offline event listeners
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      showToast('Đã kết nối Internet trở lại!', 'success');
+      showToast('Đã kết nối Internet! Dữ liệu đang được đồng bộ đám mây.', 'success');
     };
     const handleOffline = () => {
       setIsOnline(false);
@@ -201,13 +258,15 @@ export default function App() {
 
   const handleSaveQuestionToBank = (q: Question) => {
     setQuestionBank((prev) => [q, ...prev]);
-    showToast('Đã lưu câu hỏi vào Ngân hàng hệ thống!', 'success');
+    saveQuestionToCloud(q);
+    showToast('Đã lưu câu hỏi vào Ngân hàng đám mây hệ thống!', 'success');
   };
 
   const handleSaveAllToBank = () => {
     if (draftingQuestions.length === 0) return;
     setQuestionBank((prev) => [...draftingQuestions, ...prev]);
-    showToast(`Đã lưu toàn bộ ${draftingQuestions.length} câu hỏi vào Ngân hàng!`, 'success');
+    draftingQuestions.forEach((q) => saveQuestionToCloud(q));
+    showToast(`Đã đồng bộ toàn bộ ${draftingQuestions.length} câu hỏi lên Ngân hàng đám mây!`, 'success');
   };
 
   const handleConfirmPublish = (data: {
@@ -242,24 +301,28 @@ export default function App() {
     };
 
     setExams((prev) => [newExam, ...prev]);
+    saveExamToCloud(newExam);
     setDraftingQuestions([]);
     setIsPublishOpen(false);
-    showToast(`Xuất bản đề thi "${data.title}" thành công!`, 'success');
+    showToast(`Xuất bản đề thi "${data.title}" lên Đám mây thành công! Học sinh đã có thể nhập mã ${data.code} để thi.`, 'success');
     setCurrentTab('manage');
   };
 
   const handleSaveExamEdits = (updated: Partial<Exam>) => {
     if (!editingExam) return;
+    const updatedExam = { ...editingExam, ...updated };
     setExams((prev) =>
-      prev.map((e) => (e.id === editingExam.id ? { ...e, ...updated } : e))
+      prev.map((e) => (e.id === editingExam.id ? updatedExam : e))
     );
+    saveExamToCloud(updatedExam);
     setEditingExam(null);
-    showToast('Đã cập nhật thông tin đề thi!', 'success');
+    showToast('Đã cập nhật thông tin đề thi lên Đám mây!', 'success');
   };
 
   const handleDeleteExam = (id: string) => {
     setExams((prev) => prev.filter((e) => e.id !== id));
-    showToast('Đã xóa đề thi khỏi hệ thống', 'info');
+    deleteExamFromCloud(id);
+    showToast('Đã xóa đề thi khỏi hệ thống đám mây', 'info');
   };
 
   const handleQuickStartExam = (code: string) => {
@@ -291,12 +354,24 @@ export default function App() {
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target?.result as string);
-        if (data.bank && Array.isArray(data.bank)) setQuestionBank(data.bank);
-        if (data.exams && Array.isArray(data.exams)) setExams(data.exams);
-        if (data.results && Array.isArray(data.results)) setResults(data.results);
-        if (data.pin && typeof data.pin === 'string') setSystemPin(data.pin);
+        if (data.bank && Array.isArray(data.bank)) {
+          setQuestionBank(data.bank);
+          data.bank.forEach((q: Question) => saveQuestionToCloud(q));
+        }
+        if (data.exams && Array.isArray(data.exams)) {
+          setExams(data.exams);
+          data.exams.forEach((ex: Exam) => saveExamToCloud(ex));
+        }
+        if (data.results && Array.isArray(data.results)) {
+          setResults(data.results);
+          data.results.forEach((r: ExamResult) => submitExamResultToCloud(r));
+        }
+        if (data.pin && typeof data.pin === 'string') {
+          setSystemPin(data.pin);
+          updateSystemPin(data.pin);
+        }
 
-        showToast('Đã khôi phục dữ liệu hệ thống thành công!', 'success');
+        showToast('Đã khôi phục và đồng bộ toàn bộ dữ liệu lên Đám mây thành công!', 'success');
       } catch {
         showToast('Tệp JSON sao lưu không hợp lệ!', 'error');
       }
@@ -325,7 +400,10 @@ export default function App() {
         {currentTab === 'take' && (
           <TabTakeExam
             exams={exams}
-            onExamSubmitted={(res) => setResults((prev) => [res, ...prev])}
+            onExamSubmitted={(res) => {
+              setResults((prev) => [res, ...prev]);
+              submitExamResultToCloud(res);
+            }}
             showToast={showToast}
             presetExamCode={presetExamCode}
             onClearPresetCode={() => setPresetExamCode(null)}
@@ -364,8 +442,14 @@ export default function App() {
         {currentTab === 'results' && (
           <TabResults
             results={results}
-            onClearResults={() => setResults([])}
-            onDeleteResult={(id) => setResults((prev) => prev.filter((r) => r.id !== id))}
+            onClearResults={() => {
+              results.forEach((r) => deleteExamResultFromCloud(r.id));
+              setResults([]);
+            }}
+            onDeleteResult={(id) => {
+              setResults((prev) => prev.filter((r) => r.id !== id));
+              deleteExamResultFromCloud(id);
+            }}
             showToast={showToast}
           />
         )}
@@ -382,7 +466,8 @@ export default function App() {
         systemPin={systemPin}
         onChangePin={(newPin) => {
           setSystemPin(newPin);
-          showToast('Cập nhật mã PIN quản trị thành công!', 'success');
+          updateSystemPin(newPin);
+          showToast('Cập nhật mã PIN quản trị lên Đám mây thành công!', 'success');
         }}
       />
 
@@ -402,8 +487,12 @@ export default function App() {
           setCurrentTab('create');
         }}
         onDelete={(index) => {
+          const target = questionBank[index];
+          if (target) {
+            deleteQuestionFromCloud(target.id);
+          }
           setQuestionBank((prev) => prev.filter((_, i) => i !== index));
-          showToast('Đã xóa câu hỏi khỏi ngân hàng', 'info');
+          showToast('Đã xóa câu hỏi khỏi ngân hàng đám mây', 'info');
         }}
       />
 

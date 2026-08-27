@@ -1,5 +1,5 @@
 import React from 'react';
-import { Database, Lock, GraduationCap, UserCheck, Wifi, WifiOff, ShieldCheck } from 'lucide-react';
+import { Database, Lock, GraduationCap, UserCheck, Wifi, WifiOff, ShieldCheck, Cloud } from 'lucide-react';
 
 interface HeaderProps {
   currentTab: string;
@@ -39,12 +39,12 @@ export const Header: React.FC<HeaderProps> = ({
               {!isOnline ? (
                 <span className="inline-flex items-center gap-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">
                   <WifiOff className="w-2.5 h-2.5" />
-                  <span>Ngoại tuyến</span>
+                  <span>Ngoại tuyến (Offline)</span>
                 </span>
               ) : (
-                <span className="hidden lg:inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-medium px-2 py-0.5 rounded-full" title="Tất cả dữ liệu được tự động lưu cục bộ an toàn, không lo mất mạng">
-                  <ShieldCheck className="w-2.5 h-2.5 text-emerald-400" />
-                  <span>Lưu Cục Bộ Tự Động</span>
+                <span className="hidden lg:inline-flex items-center gap-1 bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full shadow-sm" title="Dữ liệu được đồng bộ trực tuyến thời gian thực qua Cloud Firestore">
+                  <Cloud className="w-3 h-3 text-indigo-400 animate-pulse" />
+                  <span>Cloud Đồng Bộ Trực Tuyến</span>
                 </span>
               )}
             </div>
