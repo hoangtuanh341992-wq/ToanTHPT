@@ -1,5 +1,19 @@
 import React from 'react';
-import { Database, Lock, GraduationCap, UserCheck, Wifi, WifiOff, ShieldCheck, Cloud } from 'lucide-react';
+import {
+  Database,
+  Lock,
+  GraduationCap,
+  UserCheck,
+  Wifi,
+  WifiOff,
+  ShieldCheck,
+  Cloud,
+  Users,
+  Shield,
+  LogOut,
+  ChevronDown,
+} from 'lucide-react';
+import { UserAccount } from '../types';
 
 interface HeaderProps {
   currentTab: string;
@@ -9,6 +23,9 @@ interface HeaderProps {
   bankCount: number;
   onOpenBank: () => void;
   isOnline?: boolean;
+  currentUser?: UserAccount | null;
+  onOpenTeacherManagement?: () => void;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -19,7 +36,12 @@ export const Header: React.FC<HeaderProps> = ({
   bankCount,
   onOpenBank,
   isOnline = true,
+  currentUser = null,
+  onOpenTeacherManagement,
+  onLogout,
 }) => {
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+
   return (
     <header className="sticky top-0 z-40 bg-slate-900/90 border-b border-slate-800/80 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
@@ -104,33 +126,60 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </nav>
 
-        {/* Actions (Bank & Role Toggle) */}
-        <div className="flex items-center gap-2.5">
+        {/* Actions (Bank & Role Toggle / User Profile) */}
+        <div className="flex items-center gap-2">
+          {/* Question Bank Trigger */}
           <button
             onClick={onOpenBank}
-            className="relative bg-slate-900 hover:bg-slate-800 text-indigo-300 border border-indigo-500/30 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm hover:border-indigo-500/50"
+            className="relative bg-slate-900 hover:bg-slate-800 text-indigo-300 border border-indigo-500/30 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm hover:border-indigo-500/50"
             title="Mở Ngân hàng câu hỏi"
           >
             <Database className="w-4 h-4 text-indigo-400" />
             <span className="hidden sm:inline">Ngân Hàng Đề</span>
-            <span className="bg-indigo-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black">
+            <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black">
               {bankCount}
             </span>
           </button>
 
-          {/* Admin Role Toggle Button */}
+          {/* Super Admin Manage Teachers Button */}
+          {isAdmin && isSuperAdmin && onOpenTeacherManagement && (
+            <button
+              onClick={onOpenTeacherManagement}
+              className="bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+              title="Quản lý danh sách giáo viên, phân quyền và cấp mật khẩu riêng"
+            >
+              <Users className="w-4 h-4 text-indigo-400" />
+              <span className="hidden md:inline">DS Giáo Viên</span>
+            </button>
+          )}
+
+          {/* Admin Role Toggle / User Profile Button */}
           <button
             onClick={onToggleAdmin}
-            className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 border ${
+            className={`px-3 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 border ${
               isAdmin
-                ? 'bg-indigo-950/60 border-indigo-500/40 text-indigo-300 hover:bg-indigo-900/60 shadow-md shadow-indigo-950/50'
+                ? isSuperAdmin
+                  ? 'bg-amber-950/50 border-amber-500/40 text-amber-300 hover:bg-amber-900/60 shadow-md shadow-amber-950/40'
+                  : 'bg-indigo-950/60 border-indigo-500/40 text-indigo-300 hover:bg-indigo-900/60 shadow-md shadow-indigo-950/50'
                 : 'bg-slate-900 border-slate-800 text-amber-400 hover:bg-slate-800 hover:border-slate-700'
             }`}
+            title={isAdmin ? (currentUser ? `Đang đăng nhập: ${currentUser.displayName} (@${currentUser.username})` : 'Tài khoản Giáo viên') : 'Chuyển sang chế độ Giáo viên'}
           >
             {isAdmin ? (
               <>
-                <UserCheck className="w-4 h-4 text-indigo-400" />
-                <span className="font-extrabold">Giáo Viên</span>
+                {isSuperAdmin ? (
+                  <Shield className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <UserCheck className="w-4 h-4 text-indigo-400" />
+                )}
+                <span className="font-extrabold max-w-[100px] truncate sm:max-w-none">
+                  {currentUser ? currentUser.displayName.split(' ').slice(-1)[0] : 'Giáo Viên'}
+                </span>
+                {isSuperAdmin && (
+                  <span className="bg-amber-500/20 text-amber-300 text-[9px] px-1.5 py-0.5 rounded font-black hidden sm:inline">
+                    ADMIN
+                  </span>
+                )}
               </>
             ) : (
               <>

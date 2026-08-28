@@ -74,3 +74,19 @@ export interface ToastMessage {
   message: string;
   type: 'info' | 'success' | 'error' | 'warning';
 }
+
+export type UserRole = 'super_admin' | 'teacher';
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  displayName: string;
+  email?: string;
+  role: UserRole;
+  password?: string; // Mật khẩu định danh
+  subject?: string;
+  school?: string;
+  createdAt: string;
+  isActive: boolean;
+  lastLoginAt?: string;
+}

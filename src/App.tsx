@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Exam, ExamResult, Question, ToastMessage } from './types';
+import { Exam, ExamResult, Question, ToastMessage, UserAccount } from './types';
 import { initialExams, initialQuestionBank } from './data/sampleData';
 import {
   STORAGE_KEYS,
   getStorageItem,
   setStorageItem,
+  removeStorageItem,
 } from './utils/storage';
 import {
   fetchSystemPin,
@@ -19,13 +20,18 @@ import {
   subscribeExamResults,
   submitExamResultToCloud,
   deleteExamResultFromCloud,
+  subscribeUsers,
+  saveUserToCloud,
+  deleteUserFromCloud,
+  DEFAULT_ROOT_ADMIN,
 } from './lib/firebase';
 import { Header } from './components/Header';
 import { TabTakeExam } from './components/TabTakeExam';
 import { TabCreateExam } from './components/TabCreateExam';
 import { TabManageExams } from './components/TabManageExams';
 import { TabResults } from './components/TabResults';
-import { AdminAuthModal } from './components/AdminAuthModal';
+import { AuthModal } from './components/AuthModal';
+import { TeacherManagementModal } from './components/TeacherManagementModal';
 import { PublishModal } from './components/PublishModal';
 import { EditExamModal } from './components/EditExamModal';
 import { QuestionBankModal } from './components/QuestionBankModal';
@@ -37,12 +43,21 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     return getStorageItem<boolean>(STORAGE_KEYS.IS_ADMIN, false);
   });
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
+    return getStorageItem<UserAccount | null>(STORAGE_KEYS.CURRENT_USER, null);
+  });
   const [systemPin, setSystemPin] = useState<string>(() => {
     return getStorageItem<string>(STORAGE_KEYS.PIN, '123456');
   });
 
+  // Users Accounts (Teachers & Super Admin)
+  const [users, setUsers] = useState<UserAccount[]>(() => {
+    return getStorageItem<UserAccount[]>(STORAGE_KEYS.USERS, [DEFAULT_ROOT_ADMIN]);
+  });
+
   // Modal States
-  const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isTeacherMgmtOpen, setIsTeacherMgmtOpen] = useState(false);
   const [pendingTab, setPendingTab] = useState<'create' | 'manage' | 'results' | null>(null);
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [isPublishOpen, setIsPublishOpen] = useState(false);
@@ -103,7 +118,15 @@ export default function App() {
     setStorageItem(STORAGE_KEYS.IS_ADMIN, isAdmin);
   }, [isAdmin]);
 
-  // Firebase Real-Time Cloud Listeners (Subscribes to Exams, Bank, Results, PIN)
+  useEffect(() => {
+    setStorageItem(STORAGE_KEYS.CURRENT_USER, currentUser);
+  }, [currentUser]);
+
+  useEffect(() => {
+    setStorageItem(STORAGE_KEYS.USERS, users);
+  }, [users]);
+
+  // Firebase Real-Time Cloud Listeners (Subscribes to Exams, Bank, Results, PIN, Users)
   useEffect(() => {
     // 1. Subscribe to Cloud PIN
     const unsubPin = subscribeSystemPin((cloudPin) => {
@@ -133,6 +156,13 @@ export default function App() {
       }
     });
 
+    // 5. Subscribe to Cloud Users
+    const unsubUsers = subscribeUsers((cloudUsers) => {
+      if (cloudUsers && Array.isArray(cloudUsers) && cloudUsers.length > 0) {
+        setUsers(cloudUsers);
+      }
+    });
+
     // Initial PIN fetch
     fetchSystemPin().then((pin) => {
       if (pin) setSystemPin(pin);
@@ -143,6 +173,7 @@ export default function App() {
       unsubExams();
       unsubBank();
       unsubResults();
+      unsubUsers();
     };
   }, []);
 
@@ -192,6 +223,11 @@ export default function App() {
           setDraftingQuestions(JSON.parse(e.newValue));
         } catch {}
       }
+      if (e.key === STORAGE_KEYS.USERS && e.newValue) {
+        try {
+          setUsers(JSON.parse(e.newValue));
+        } catch {}
+      }
     };
 
     window.addEventListener('storage', handleStorageChange);
@@ -222,7 +258,7 @@ export default function App() {
 
     if (!isAdmin) {
       setPendingTab(tab);
-      setIsAdminAuthOpen(true);
+      setIsAuthOpen(true);
     } else {
       setCurrentTab(tab);
     }
@@ -231,26 +267,37 @@ export default function App() {
   const handleToggleAdmin = () => {
     if (isAdmin) {
       setIsAdmin(false);
+      setCurrentUser(null);
+      removeStorageItem(STORAGE_KEYS.CURRENT_USER);
       showToast('Đã chuyển sang chế độ Học Sinh', 'info');
       setCurrentTab('take');
     } else {
-      setIsAdminAuthOpen(true);
+      setIsAuthOpen(true);
     }
   };
 
-  const handleAdminAuthSuccess = () => {
+  const handleLoginSuccess = (user: UserAccount) => {
     setIsAdmin(true);
-    setIsAdminAuthOpen(false);
-    showToast('Đã xác thực quyền Giáo Viên thành công!', 'success');
+    setCurrentUser(user);
+    setIsAuthOpen(false);
+    showToast(`Chào mừng thầy/cô ${user.displayName} đã đăng nhập hệ thống!`, 'success');
     if (pendingTab) {
       setCurrentTab(pendingTab);
       setPendingTab(null);
     }
   };
 
+  const handleLogout = () => {
+    setIsAdmin(false);
+    setCurrentUser(null);
+    removeStorageItem(STORAGE_KEYS.CURRENT_USER);
+    showToast('Đã đăng xuất khỏi tài khoản giáo viên.', 'info');
+    setCurrentTab('take');
+  };
+
   const handleOpenBank = () => {
     if (!isAdmin) {
-      setIsAdminAuthOpen(true);
+      setIsAuthOpen(true);
     } else {
       setIsBankOpen(true);
     }
@@ -330,11 +377,28 @@ export default function App() {
     setCurrentTab('take');
   };
 
+  const handleSaveUserAccount = (user: UserAccount) => {
+    setUsers((prev) => {
+      const exists = prev.some((u) => u.id === user.id);
+      if (exists) {
+        return prev.map((u) => (u.id === user.id ? user : u));
+      }
+      return [user, ...prev];
+    });
+    saveUserToCloud(user);
+  };
+
+  const handleDeleteUserAccount = (userId: string) => {
+    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    deleteUserFromCloud(userId);
+  };
+
   const handleExportSystemData = () => {
     const backupData = {
-      version: '1.0',
+      version: '2.0',
       exportedAt: new Date().toISOString(),
       pin: systemPin,
+      users: users,
       bank: questionBank,
       exams: exams,
       results: results,
@@ -366,6 +430,10 @@ export default function App() {
           setResults(data.results);
           data.results.forEach((r: ExamResult) => submitExamResultToCloud(r));
         }
+        if (data.users && Array.isArray(data.users)) {
+          setUsers(data.users);
+          data.users.forEach((u: UserAccount) => saveUserToCloud(u));
+        }
         if (data.pin && typeof data.pin === 'string') {
           setSystemPin(data.pin);
           updateSystemPin(data.pin);
@@ -389,9 +457,12 @@ export default function App() {
         currentTab={currentTab}
         onTabChange={handleTabChange}
         isAdmin={isAdmin}
+        currentUser={currentUser}
         onToggleAdmin={handleToggleAdmin}
         bankCount={questionBank.length}
         onOpenBank={handleOpenBank}
+        onOpenTeacherManagement={() => setIsTeacherMgmtOpen(true)}
+        onLogout={handleLogout}
         isOnline={isOnline}
       />
 
@@ -428,10 +499,13 @@ export default function App() {
             exams={exams}
             questionBankCount={questionBank.length}
             resultsCount={results.length}
+            usersCount={users.length}
+            currentUser={currentUser}
+            onOpenTeacherManagement={() => setIsTeacherMgmtOpen(true)}
             onOpenEditExam={(ex) => setEditingExam(ex)}
             onDeleteExam={handleDeleteExam}
             onQuickStartExam={handleQuickStartExam}
-            onOpenPinChange={() => setIsAdminAuthOpen(true)}
+            onOpenPinChange={() => setIsAuthOpen(true)}
             onExportSystemData={handleExportSystemData}
             onImportSystemData={handleImportSystemData}
             onGoToCreate={() => setCurrentTab('create')}
@@ -455,20 +529,34 @@ export default function App() {
         )}
       </main>
 
-      {/* Admin Auth / PIN modal */}
-      <AdminAuthModal
-        isOpen={isAdminAuthOpen}
+      {/* Multi-user Auth Modal */}
+      <AuthModal
+        isOpen={isAuthOpen}
         onClose={() => {
-          setIsAdminAuthOpen(false);
+          setIsAuthOpen(false);
           setPendingTab(null);
         }}
-        onSuccess={handleAdminAuthSuccess}
+        onLoginSuccess={handleLoginSuccess}
+        users={users}
         systemPin={systemPin}
         onChangePin={(newPin) => {
           setSystemPin(newPin);
           updateSystemPin(newPin);
-          showToast('Cập nhật mã PIN quản trị lên Đám mây thành công!', 'success');
+          showToast('Đã cập nhật mã PIN hệ thống lên Đám mây thành công!', 'success');
         }}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+      />
+
+      {/* Teacher Account Management Modal */}
+      <TeacherManagementModal
+        isOpen={isTeacherMgmtOpen}
+        onClose={() => setIsTeacherMgmtOpen(false)}
+        users={users}
+        currentUser={currentUser}
+        onSaveUser={handleSaveUserAccount}
+        onDeleteUser={handleDeleteUserAccount}
+        showToast={showToast}
       />
 
       {/* Question Bank Modal */}

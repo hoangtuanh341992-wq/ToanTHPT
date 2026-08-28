@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Exam } from '../types';
+import { Exam, UserAccount } from '../types';
 import { exportExamToWord, exportExamToPDF } from '../utils/examExporter';
 import {
   FileSpreadsheet,
@@ -20,12 +20,17 @@ import {
   FileType,
   FileText,
   Printer,
+  Shield,
+  UserCheck,
 } from 'lucide-react';
 
 interface TabManageExamsProps {
   exams: Exam[];
   questionBankCount: number;
   resultsCount: number;
+  usersCount?: number;
+  currentUser?: UserAccount | null;
+  onOpenTeacherManagement?: () => void;
   onOpenEditExam: (exam: Exam) => void;
   onDeleteExam: (id: string) => void;
   onQuickStartExam: (code: string) => void;
@@ -40,6 +45,9 @@ export const TabManageExams: React.FC<TabManageExamsProps> = ({
   exams,
   questionBankCount,
   resultsCount,
+  usersCount = 1,
+  currentUser = null,
+  onOpenTeacherManagement,
   onOpenEditExam,
   onDeleteExam,
   onQuickStartExam,
@@ -53,6 +61,8 @@ export const TabManageExams: React.FC<TabManageExamsProps> = ({
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [deletingExam, setDeletingExam] = useState<Exam | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isSuperAdmin = currentUser?.role === 'super_admin';
 
   const filteredExams = exams.filter(
     (e) =>
@@ -111,16 +121,27 @@ export const TabManageExams: React.FC<TabManageExamsProps> = ({
 
         <div className="bg-slate-900/90 p-5 rounded-3xl border border-slate-800 shadow-lg flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Mã PIN Quản Trị</p>
-            <button
-              onClick={onOpenPinChange}
-              className="text-xs text-indigo-400 hover:text-indigo-300 font-bold mt-1 block underline"
-            >
-              Đổi mã PIN
-            </button>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              {isSuperAdmin ? 'Giáo Viên & Phân Quyền' : 'Tài Khoản Giáo Viên'}
+            </p>
+            {isSuperAdmin && onOpenTeacherManagement ? (
+              <button
+                onClick={onOpenTeacherManagement}
+                className="text-xs text-indigo-400 hover:text-indigo-300 font-bold mt-1 block underline text-left"
+              >
+                Quản lý {usersCount} giáo viên
+              </button>
+            ) : (
+              <button
+                onClick={onOpenPinChange}
+                className="text-xs text-indigo-400 hover:text-indigo-300 font-bold mt-1 block underline"
+              >
+                Đổi mật khẩu / PIN
+              </button>
+            )}
           </div>
           <div className="w-12 h-12 bg-purple-600/20 text-purple-400 border border-purple-500/30 rounded-2xl flex items-center justify-center font-bold text-xl">
-            <KeyRound className="w-6 h-6" />
+            {isSuperAdmin ? <Shield className="w-6 h-6 text-amber-400" /> : <UserCheck className="w-6 h-6 text-purple-400" />}
           </div>
         </div>
       </div>
@@ -132,11 +153,21 @@ export const TabManageExams: React.FC<TabManageExamsProps> = ({
             <span>📁 Quản Lý Đề Thi &amp; Dữ Liệu Giáo Viên</span>
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Quản lý toàn bộ danh sách đề thi đã xuất bản, sao lưu dự phòng hoặc khôi phục dữ liệu hệ thống.
+            Quản lý toàn bộ danh sách đề thi đã xuất bản, cấp phát tài khoản giáo viên hoặc sao lưu dữ liệu.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {isSuperAdmin && onOpenTeacherManagement && (
+            <button
+              onClick={onOpenTeacherManagement}
+              className="bg-indigo-950/60 hover:bg-indigo-900/80 text-indigo-300 text-xs font-bold px-3.5 py-2.5 rounded-xl border border-indigo-500/40 transition-all flex items-center gap-1.5 shadow-sm"
+            >
+              <Users className="w-4 h-4 text-indigo-400" />
+              <span>Phân Quyền Giáo Viên ({usersCount})</span>
+            </button>
+          )}
+
           <button
             onClick={onExportSystemData}
             className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2.5 rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 shadow-sm"

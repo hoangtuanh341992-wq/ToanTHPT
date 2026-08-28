@@ -58,6 +58,22 @@
         "tabSwitchCount": { "type": "number" }
       },
       "required": ["id", "studentName", "score", "submittedAt"]
+    },
+    "users": {
+      "title": "UserAccount",
+      "description": "System users and teachers with roles and passwords",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string" },
+        "password": { "type": "string" },
+        "email": { "type": "string" },
+        "subject": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "username", "role"]
     }
   }
 }

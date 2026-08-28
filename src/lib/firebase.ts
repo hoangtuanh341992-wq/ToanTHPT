@@ -16,7 +16,7 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import firebaseConfigData from '../../firebase-applet-config.json';
-import { Exam, ExamResult, Question } from '../types';
+import { Exam, ExamResult, Question, UserAccount } from '../types';
 import { initialExams, initialQuestionBank } from '../data/sampleData';
 
 // Initialize Firebase App
@@ -33,6 +33,7 @@ export const COLLECTIONS = {
   EXAMS: 'exams',
   QBANK: 'question_bank',
   RESULTS: 'exam_results',
+  USERS: 'users',
 } as const;
 
 // -------------------------------------------------------------
@@ -239,6 +240,91 @@ export async function deleteExamResultFromCloud(resultId: string): Promise<boole
     return true;
   } catch (error) {
     console.error('[Firebase] deleteExamResultFromCloud error:', error);
+    return false;
+  }
+}
+
+// -------------------------------------------------------------
+// USER ACCOUNTS & RBAC MANAGEMENT
+// -------------------------------------------------------------
+
+export const DEFAULT_ROOT_ADMIN: UserAccount = {
+  id: 'user-admin-root',
+  username: 'admin',
+  displayName: 'Quản Trị Viên Tối Cao',
+  email: 'hoangtuanh341992@gmail.com',
+  role: 'super_admin',
+  password: '123',
+  subject: 'Toán Học - Quản Trị',
+  school: 'Hệ Thống DoretaExam',
+  createdAt: '2026-08-28',
+  isActive: true,
+  lastLoginAt: new Date().toISOString(),
+};
+
+export function subscribeUsers(callback: (users: UserAccount[]) => void): () => void {
+  const colRef = collection(db, COLLECTIONS.USERS);
+  return onSnapshot(
+    colRef,
+    async (snapshot) => {
+      if (snapshot.empty) {
+        // Seed default super admin account
+        try {
+          await setDoc(doc(db, COLLECTIONS.USERS, DEFAULT_ROOT_ADMIN.id), DEFAULT_ROOT_ADMIN);
+          callback([DEFAULT_ROOT_ADMIN]);
+          return;
+        } catch (e) {
+          console.warn('[Firebase] Seed root admin error:', e);
+          callback([DEFAULT_ROOT_ADMIN]);
+          return;
+        }
+      }
+
+      const list: UserAccount[] = [];
+      let hasAdmin = false;
+      snapshot.forEach((docSnap) => {
+        const u = docSnap.data() as UserAccount;
+        list.push(u);
+        if (u.role === 'super_admin' || u.username === 'admin') {
+          hasAdmin = true;
+        }
+      });
+
+      // Ensure root admin exists
+      if (!hasAdmin) {
+        try {
+          await setDoc(doc(db, COLLECTIONS.USERS, DEFAULT_ROOT_ADMIN.id), DEFAULT_ROOT_ADMIN);
+          list.unshift(DEFAULT_ROOT_ADMIN);
+        } catch {}
+      }
+
+      callback(list);
+    },
+    (error) => {
+      console.warn('[Firebase] subscribeUsers error:', error);
+      callback([DEFAULT_ROOT_ADMIN]);
+    }
+  );
+}
+
+export async function saveUserToCloud(user: UserAccount): Promise<boolean> {
+  try {
+    const docRef = doc(db, COLLECTIONS.USERS, user.id);
+    await setDoc(docRef, user, { merge: true });
+    return true;
+  } catch (error) {
+    console.error('[Firebase] saveUserToCloud error:', error);
+    return false;
+  }
+}
+
+export async function deleteUserFromCloud(userId: string): Promise<boolean> {
+  try {
+    const docRef = doc(db, COLLECTIONS.USERS, userId);
+    await deleteDoc(docRef);
+    return true;
+  } catch (error) {
+    console.error('[Firebase] deleteUserFromCloud error:', error);
     return false;
   }
 }

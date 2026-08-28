@@ -1,7 +1,28 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
+    // System Settings: Global PIN & config
+    match /system_settings/{docId} {
+      allow read, write: if true;
+    }
+
+    // Published Exams: Viewable by students and editable by teachers
+    match /exams/{examId} {
+      allow read, write: if true;
+    }
+
+    // Shared Question Bank: Teachers and admins
+    match /question_bank/{questionId} {
+      allow read, write: if true;
+    }
+
+    // Exam Results: Students submit and teachers view
+    match /exam_results/{resultId} {
+      allow read, write: if true;
+    }
+
+    // Users and Teachers Accounts: Managed by Super Admin
+    match /users/{userId} {
       allow read, write: if true;
     }
   }

@@ -12,6 +12,8 @@ export const STORAGE_KEYS = {
   DRAFT_FORM: 'doreta_draft_form',
   ACTIVE_SESSION: 'doreta_active_session',
   IS_ADMIN: 'doreta_is_admin',
+  CURRENT_USER: 'doreta_current_user',
+  USERS: 'doreta_users_list',
 } as const;
 
 /**
