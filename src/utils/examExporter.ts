@@ -687,6 +687,782 @@ export function exportExamToPDF(exam: Exam) {
 }
 
 /**
+ * EXPORT MULTI-VARIANT EXAMS (1 to 4 codes) TO A SINGLE WORD (.DOC) DOCUMENT WITH COMPARATIVE ANSWER KEY MATRIX
+ */
+export function exportMultiVariantExamToWord(
+  variants: Exam[],
+  options: { includeAnswers?: boolean } = { includeAnswers: true }
+) {
+  if (!variants || variants.length === 0) return;
+  if (variants.length === 1) {
+    exportExamToWord(variants[0], options);
+    return;
+  }
+
+  const baseTitle = variants[0].title.replace(/\s*-\s*\[Mã đề\s*[^\]]+\]/i, '').replace(/\s*\(Mã đề\s*[^\)]+\)/i, '');
+  const duration = variants[0].duration;
+  const codes = variants.map((v) => v.code);
+
+  // Build each variant HTML
+  const variantsHtml = variants
+    .map((exam, vIdx) => {
+      const { code, questions } = exam;
+      const part1 = questions.filter((q) => q.type === 'mc');
+      const part2 = questions.filter((q) => q.type === 'tf');
+      const part3 = questions.filter((q) => q.type === 'short');
+      const part4 = questions.filter((q) => q.type === 'essay');
+      let questionCounter = 0;
+
+      return `
+        <div class="${vIdx > 0 ? 'page-break' : ''}">
+          <!-- Header Table -->
+          <table class="header-table">
+            <tr>
+              <td style="width: 50%; text-align: center;">
+                <div style="font-size: 11.5pt; text-transform: uppercase;">SỞ GIÁO DỤC VÀ ĐÀO TẠO</div>
+                <div style="font-weight: bold; font-size: 12pt; text-transform: uppercase;">TRƯỜNG THPT CHUYÊN</div>
+                <div style="font-size: 10.5pt; font-style: italic;">(Đề thi chính thức)</div>
+              </td>
+              <td style="width: 50%; text-align: center;">
+                <div style="font-weight: bold; font-size: 12pt; text-transform: uppercase;">KỲ THI KHẢO SÁT CHẤT LƯỢNG</div>
+                <div style="font-size: 11pt;">NĂM HỌC 2025 - 2026</div>
+                <div style="font-weight: bold; font-size: 12pt; margin-top: 2px;">
+                  MÃ ĐỀ THI: <span style="border: 2px solid #000; padding: 2px 10px; background-color: #f0f0f0;">${escapeHtml(code)}</span>
+                </div>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Exam Main Title -->
+          <div class="title-box">
+            <div class="exam-title">${escapeHtml(baseTitle)}</div>
+            <div style="font-size: 11.5pt; margin-top: 4px;">
+              Thời gian làm bài: <b>${duration} phút</b> <i>(không kể thời gian phát đề)</i> • <b>Mã đề: ${escapeHtml(code)}</b>
+            </div>
+          </div>
+
+          <!-- Student Identification Box -->
+          <div class="student-box">
+            <table style="width: 100%;">
+              <tr>
+                <td style="width: 45%;">Họ và tên thí sinh: ..............................................................</td>
+                <td style="width: 25%;">Lớp: ............................</td>
+                <td style="width: 30%;"><b>Số báo danh (SBD):</b> ....................</td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- PART I: MULTIPLE CHOICE -->
+          ${
+            part1.length > 0
+              ? `
+            <div class="part-header">PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn (${part1.length} câu)</div>
+            <div class="part-desc">Thí sinh trả lời từ câu 1 đến câu ${part1.length}. Mỗi câu hỏi thí sinh chỉ chọn một phương án.</div>
+            ${part1
+              .map((q) => {
+                questionCounter++;
+                return `
+                <div class="question-item">
+                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
+                  <div class="q-title"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
+                  ${q.image ? `<img src="${q.image}" class="q-img" alt="Hình minh họa" />` : ''}
+                  ${
+                    q.options
+                      ? `
+                    <table class="options-table">
+                      <tr>
+                        <td><b>A.</b> ${formatMathForHtml(q.options.A)}</td>
+                        <td><b>B.</b> ${formatMathForHtml(q.options.B)}</td>
+                      </tr>
+                      <tr>
+                        <td><b>C.</b> ${formatMathForHtml(q.options.C)}</td>
+                        <td><b>D.</b> ${formatMathForHtml(q.options.D)}</td>
+                      </tr>
+                    </table>
+                  `
+                      : ''
+                  }
+                </div>
+              `;
+              })
+              .join('')}
+          `
+              : ''
+          }
+
+          <!-- PART II: TRUE / FALSE -->
+          ${
+            part2.length > 0
+              ? `
+            <div class="part-header">PHẦN II. Câu trắc nghiệm đúng sai (${part2.length} câu)</div>
+            <div class="part-desc">Thí sinh trả lời từ câu 1 đến câu ${part2.length}. Trong mỗi ý a), b), c), d) ở mỗi câu, thí sinh chọn đúng hoặc sai.</div>
+            ${part2
+              .map((q) => {
+                questionCounter++;
+                return `
+                <div class="question-item">
+                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
+                  <div class="q-title"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
+                  ${q.image ? `<img src="${q.image}" class="q-img" alt="Hình minh họa" />` : ''}
+                  ${
+                    q.statements
+                      ? `
+                    <div class="tf-list">
+                      <div class="tf-item"><b>a)</b> ${formatMathForHtml(q.statements.a)}</div>
+                      <div class="tf-item"><b>b)</b> ${formatMathForHtml(q.statements.b)}</div>
+                      <div class="tf-item"><b>c)</b> ${formatMathForHtml(q.statements.c)}</div>
+                      <div class="tf-item"><b>d)</b> ${formatMathForHtml(q.statements.d)}</div>
+                    </div>
+                  `
+                      : ''
+                  }
+                </div>
+              `;
+              })
+              .join('')}
+          `
+              : ''
+          }
+
+          <!-- PART III: SHORT ANSWER -->
+          ${
+            part3.length > 0
+              ? `
+            <div class="part-header">PHẦN III. Câu trắc nghiệm trả lời ngắn (${part3.length} câu)</div>
+            <div class="part-desc">Thí sinh trả lời từ câu 1 đến câu ${part3.length}. Điền kết quả vào ô tương ứng.</div>
+            ${part3
+              .map((q) => {
+                questionCounter++;
+                return `
+                <div class="question-item">
+                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
+                  <div class="q-title"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
+                  ${q.image ? `<img src="${q.image}" class="q-img" alt="Hình minh họa" />` : ''}
+                  <div style="margin-top: 6px; font-style: italic;">
+                    <i>Trả lời: ............................................................................................................</i>
+                  </div>
+                </div>
+              `;
+              })
+              .join('')}
+          `
+              : ''
+          }
+
+          <!-- PART IV: ESSAY -->
+          ${
+            part4.length > 0
+              ? `
+            <div class="part-header">PHẦN IV. Tự luận (${part4.length} câu)</div>
+            <div class="part-desc">Thí sinh trình bày chi tiết lời giải vào giấy thi.</div>
+            ${part4
+              .map((q) => {
+                questionCounter++;
+                return `
+                <div class="question-item">
+                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
+                  <div class="q-title"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
+                  ${q.image ? `<img src="${q.image}" class="q-img" alt="Hình minh họa" />` : ''}
+                </div>
+              `;
+              })
+              .join('')}
+          `
+              : ''
+          }
+
+          <div style="text-align: center; margin-top: 24px; font-weight: bold; font-size: 11pt;">
+            ----------------- HẾT MÃ ĐỀ ${escapeHtml(code)} -----------------<br/>
+            <i>Cán bộ coi thi không giải thích gì thêm.</i>
+          </div>
+        </div>
+      `;
+    })
+    .join('\n');
+
+  // Build Comparative Answer Matrix
+  const maxQuestions = Math.max(...variants.map((v) => v.questions.length));
+  let compRows = '';
+  for (let qIdx = 0; qIdx < maxQuestions; qIdx++) {
+    const qType = variants[0].questions[qIdx]?.type || 'mc';
+    const typeLabel = qType === 'mc' ? 'Trắc nghiệm ABCD' : qType === 'tf' ? 'Đúng / Sai' : qType === 'short' ? 'Trả lời ngắn' : 'Tự luận';
+
+    const answersCells = variants
+      .map((v) => {
+        const q = v.questions[qIdx];
+        if (!q) return '<td style="border:1px solid #333; padding:6px; text-align:center;">--</td>';
+        if (q.type === 'mc') {
+          return `<td style="border:1px solid #333; padding:6px; text-align:center; font-weight:bold; font-size:12pt; color:#1e40af;">${q.correctAnswer || 'A'}</td>`;
+        }
+        if (q.type === 'tf' && q.correctAnswers) {
+          const { a, b, c, d } = q.correctAnswers;
+          return `<td style="border:1px solid #333; padding:6px; font-size:10pt;">a-${a === 'true' ? 'Đ' : 'S'}, b-${b === 'true' ? 'Đ' : 'S'}, c-${c === 'true' ? 'Đ' : 'S'}, d-${d === 'true' ? 'Đ' : 'S'}</td>`;
+        }
+        if (q.type === 'short') {
+          return `<td style="border:1px solid #333; padding:6px; text-align:center; font-weight:bold; color:#047857;">${q.correctAnswer || '--'}</td>`;
+        }
+        return `<td style="border:1px solid #333; padding:6px; font-size:10pt; font-style:italic;">Theo thang điểm</td>`;
+      })
+      .join('');
+
+    compRows += `
+      <tr>
+        <td style="border:1px solid #333; padding:6px; text-align:center; font-weight:bold;">Câu ${qIdx + 1}</td>
+        <td style="border:1px solid #333; padding:6px; text-align:center; font-size:10.5pt;">${typeLabel}</td>
+        ${answersCells}
+      </tr>
+    `;
+  }
+
+  const comparativeMatrixHtml = options.includeAnswers
+    ? `
+      <div class="page-break"></div>
+      <div style="text-align: center; margin-top: 30px; margin-bottom: 20px;">
+        <h2 style="font-size: 14pt; text-transform: uppercase; margin: 0; color:#1e3a8a;">BẢNG TỔNG HỢP ĐÁP ÁN ĐỐI CHIẾU CÁC MÃ ĐỀ THI</h2>
+        <div style="font-size: 11pt; margin-top: 6px;">
+          ${escapeHtml(baseTitle)} • Các mã đề: <b>${codes.map((c) => escapeHtml(c)).join(' — ')}</b>
+        </div>
+      </div>
+
+      <table class="answer-key-table" style="border-collapse:collapse; width:100%;">
+        <thead>
+          <tr style="background-color: #e0e7ff;">
+            <th style="border:1px solid #333; padding:8px; width:10%;">Câu số</th>
+            <th style="border:1px solid #333; padding:8px; width:20%;">Phân loại</th>
+            ${variants.map((v) => `<th style="border:1px solid #333; padding:8px; font-weight:bold; font-size:11.5pt;">Mã ${escapeHtml(v.code)}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${compRows}
+        </tbody>
+      </table>
+    `
+    : '';
+
+  const fullHtmlContent = `
+    <!DOCTYPE html>
+    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head>
+      <meta charset="utf-8">
+      <title>${escapeHtml(baseTitle)} - Trọn Bộ ${variants.length} Mã Đề</title>
+      <script>
+        window.MathJax = {
+          tex: {
+            inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+            displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
+            processEscapes: true
+          },
+          options: {
+            skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+          }
+        };
+      </script>
+      <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+      <style>
+        body {
+          font-family: 'Times New Roman', Times, serif;
+          font-size: 13pt;
+          line-height: 1.4;
+          color: #000;
+          margin: 20px;
+        }
+        .header-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 20px;
+        }
+        .header-table td {
+          vertical-align: top;
+          padding: 4px;
+        }
+        .title-box {
+          text-align: center;
+          margin: 15px 0;
+          border-bottom: 2px solid #000;
+          padding-bottom: 10px;
+        }
+        .exam-title {
+          font-size: 15pt;
+          font-weight: bold;
+          text-transform: uppercase;
+        }
+        .student-box {
+          border: 1px dashed #444;
+          padding: 8px 12px;
+          margin-bottom: 20px;
+          background-color: #f9f9f9;
+        }
+        .part-header {
+          font-size: 13.5pt;
+          font-weight: bold;
+          margin-top: 20px;
+          margin-bottom: 8px;
+          color: #000;
+          border-bottom: 1px solid #ccc;
+          padding-bottom: 4px;
+        }
+        .part-desc {
+          font-style: italic;
+          font-size: 11.5pt;
+          margin-bottom: 12px;
+        }
+        .question-item {
+          margin-bottom: 14px;
+          text-align: justify;
+        }
+        .q-stem {
+          font-style: italic;
+          color: #333;
+          margin-bottom: 4px;
+        }
+        .q-title {
+          font-weight: bold;
+        }
+        .options-table {
+          width: 100%;
+          margin-top: 6px;
+          margin-bottom: 6px;
+          border-collapse: collapse;
+        }
+        .options-table td {
+          width: 50%;
+          padding: 4px 8px;
+          vertical-align: top;
+        }
+        .tf-list {
+          margin-left: 20px;
+          margin-top: 4px;
+        }
+        .tf-item {
+          margin-bottom: 4px;
+        }
+        .answer-key-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 15px;
+          font-size: 11.5pt;
+        }
+        .page-break {
+          page-break-before: always;
+          mso-special-character: line-break;
+        }
+        img.q-img {
+          max-width: 450px;
+          max-height: 250px;
+          display: block;
+          margin: 8px auto;
+        }
+      </style>
+    </head>
+    <body>
+      ${variantsHtml}
+      ${comparativeMatrixHtml}
+    </body>
+    </html>
+  `;
+
+  const blob = new Blob(['\ufeff', fullHtmlContent], {
+    type: 'application/msword;charset=utf-8',
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const safeTitle = baseTitle.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30);
+  link.download = `TronBo_${variants.length}MaDe_${safeTitle}_${new Date().toISOString().slice(0, 10)}.doc`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * EXPORT MULTI-VARIANT EXAMS (1 to 4 codes) TO PRINTABLE PDF WITH CROSS-VARIANT ANSWER KEY MATRIX
+ */
+export function exportMultiVariantExamToPDF(variants: Exam[]) {
+  if (!variants || variants.length === 0) return;
+  if (variants.length === 1) {
+    exportExamToPDF(variants[0]);
+    return;
+  }
+
+  const baseTitle = variants[0].title.replace(/\s*-\s*\[Mã đề\s*[^\]]+\]/i, '').replace(/\s*\(Mã đề\s*[^\)]+\)/i, '');
+  const duration = variants[0].duration;
+  const codes = variants.map((v) => v.code);
+
+  const printWindow = window.open('', '_blank', 'width=950,height=1000');
+  if (!printWindow) {
+    alert('Vui lòng cho phép mở cửa sổ popup để in hoặc lưu tệp PDF!');
+    return;
+  }
+
+  // Build variants HTML
+  const variantsHtml = variants
+    .map((exam, vIdx) => {
+      const { code, questions } = exam;
+      const part1 = questions.filter((q) => q.type === 'mc');
+      const part2 = questions.filter((q) => q.type === 'tf');
+      const part3 = questions.filter((q) => q.type === 'short');
+      const part4 = questions.filter((q) => q.type === 'essay');
+      let questionCounter = 0;
+
+      return `
+        <div class="exam-section ${vIdx > 0 ? 'page-break' : ''}">
+          <table class="header-table">
+            <tr>
+              <td style="width: 50%; text-align: center;">
+                <div style="font-size: 11pt; text-transform: uppercase;">SỞ GIÁO DỤC VÀ ĐÀO TẠO</div>
+                <div style="font-weight: bold; font-size: 11.5pt; text-transform: uppercase;">TRƯỜNG THPT CHUYÊN</div>
+                <div style="font-size: 10pt; font-style: italic;">(Đề thi chính thức)</div>
+              </td>
+              <td style="width: 50%; text-align: center;">
+                <div style="font-weight: bold; font-size: 11.5pt; text-transform: uppercase;">KỲ THI KHẢO SÁT CHẤT LƯỢNG</div>
+                <div style="font-size: 10.5pt;">NĂM HỌC 2025 - 2026</div>
+                <div style="font-weight: bold; font-size: 11.5pt; margin-top: 2px;">
+                  MÃ ĐỀ THI: <span style="border: 2px solid #000; padding: 2px 10px; background-color: #f4f4f5;">${escapeHtml(code)}</span>
+                </div>
+              </td>
+            </tr>
+          </table>
+
+          <div class="exam-title-box">
+            <div style="font-size: 13.5pt; font-weight: bold; text-transform: uppercase;">${escapeHtml(baseTitle)}</div>
+            <div style="font-size: 11pt; margin-top: 4px;">
+              Thời gian làm bài: <b>${duration} phút</b> <i>(không kể thời gian phát đề)</i> • <b>Mã đề: ${escapeHtml(code)}</b>
+            </div>
+          </div>
+
+          <div class="student-info-box">
+            <table style="width: 100%;">
+              <tr>
+                <td style="width: 45%;">Họ và tên thí sinh: ..............................................................</td>
+                <td style="width: 25%;">Lớp: ............................</td>
+                <td style="width: 30%;"><b>Số báo danh (SBD):</b> ....................</td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- PART I -->
+          ${
+            part1.length > 0
+              ? `
+            <div class="part-heading">PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn (${part1.length} câu)</div>
+            <div class="part-note">Thí sinh trả lời từ câu 1 đến câu ${part1.length}. Mỗi câu hỏi thí sinh chỉ chọn một phương án.</div>
+            ${part1
+              .map((q) => {
+                questionCounter++;
+                return `
+                <div class="question-box">
+                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
+                  <div class="q-content"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
+                  ${q.image ? `<img src="${q.image}" class="q-image" alt="Hình minh họa" />` : ''}
+                  ${
+                    q.options
+                      ? `
+                    <div class="mc-options-grid">
+                      <div class="mc-option"><b>A.</b> ${formatMathForHtml(q.options.A)}</div>
+                      <div class="mc-option"><b>B.</b> ${formatMathForHtml(q.options.B)}</div>
+                      <div class="mc-option"><b>C.</b> ${formatMathForHtml(q.options.C)}</div>
+                      <div class="mc-option"><b>D.</b> ${formatMathForHtml(q.options.D)}</div>
+                    </div>
+                  `
+                      : ''
+                  }
+                </div>
+              `;
+              })
+              .join('')}
+          `
+              : ''
+          }
+
+          <!-- PART II -->
+          ${
+            part2.length > 0
+              ? `
+            <div class="part-heading">PHẦN II. Câu trắc nghiệm đúng sai (${part2.length} câu)</div>
+            <div class="part-note">Thí sinh trả lời từ câu 1 đến câu ${part2.length}. Trong mỗi ý a), b), c), d) ở mỗi câu, thí sinh chọn đúng hoặc sai.</div>
+            ${part2
+              .map((q) => {
+                questionCounter++;
+                return `
+                <div class="question-box">
+                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
+                  <div class="q-content"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
+                  ${q.image ? `<img src="${q.image}" class="q-image" alt="Hình minh họa" />` : ''}
+                  ${
+                    q.statements
+                      ? `
+                    <div class="tf-options">
+                      <div class="tf-statement"><b>a)</b> ${formatMathForHtml(q.statements.a)}</div>
+                      <div class="tf-statement"><b>b)</b> ${formatMathForHtml(q.statements.b)}</div>
+                      <div class="tf-statement"><b>c)</b> ${formatMathForHtml(q.statements.c)}</div>
+                      <div class="tf-statement"><b>d)</b> ${formatMathForHtml(q.statements.d)}</div>
+                    </div>
+                  `
+                      : ''
+                  }
+                </div>
+              `;
+              })
+              .join('')}
+          `
+              : ''
+          }
+
+          <!-- PART III -->
+          ${
+            part3.length > 0
+              ? `
+            <div class="part-heading">PHẦN III. Câu trắc nghiệm trả lời ngắn (${part3.length} câu)</div>
+            <div class="part-note">Thí sinh trả lời từ câu 1 đến câu ${part3.length}. Điền kết quả vào ô tương ứng.</div>
+            ${part3
+              .map((q) => {
+                questionCounter++;
+                return `
+                <div class="question-box">
+                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
+                  <div class="q-content"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
+                  ${q.image ? `<img src="${q.image}" class="q-image" alt="Hình minh họa" />` : ''}
+                  <div style="margin-top: 4px; font-style: italic; font-size: 11pt;">
+                    <i>Trả lời: ............................................................................................................</i>
+                  </div>
+                </div>
+              `;
+              })
+              .join('')}
+          `
+              : ''
+          }
+
+          <!-- PART IV -->
+          ${
+            part4.length > 0
+              ? `
+            <div class="part-heading">PHẦN IV. Tự luận (${part4.length} câu)</div>
+            <div class="part-note">Thí sinh trình bày chi tiết lời giải vào giấy thi.</div>
+            ${part4
+              .map((q) => {
+                questionCounter++;
+                return `
+                <div class="question-box">
+                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
+                  <div class="q-content"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
+                  ${q.image ? `<img src="${q.image}" class="q-image" alt="Hình minh họa" />` : ''}
+                </div>
+              `;
+              })
+              .join('')}
+          `
+              : ''
+          }
+
+          <div style="text-align: center; margin-top: 20px; font-weight: bold; font-size: 10.5pt;">
+            ----------------- HẾT MÃ ĐỀ ${escapeHtml(code)} -----------------
+          </div>
+        </div>
+      `;
+    })
+    .join('\n');
+
+  // Build Comparative Answer Matrix
+  const maxQuestions = Math.max(...variants.map((v) => v.questions.length));
+  let compRows = '';
+  for (let qIdx = 0; qIdx < maxQuestions; qIdx++) {
+    const qType = variants[0].questions[qIdx]?.type || 'mc';
+    const typeLabel = qType === 'mc' ? 'Trắc nghiệm ABCD' : qType === 'tf' ? 'Đúng / Sai' : qType === 'short' ? 'Trả lời ngắn' : 'Tự luận';
+
+    const answersCells = variants
+      .map((v) => {
+        const q = v.questions[qIdx];
+        if (!q) return '<td style="border:1px solid #333; padding:5px; text-align:center;">--</td>';
+        if (q.type === 'mc') {
+          return `<td style="border:1px solid #333; padding:5px; text-align:center; font-weight:bold; font-size:11pt; color:#1e40af;">${q.correctAnswer || 'A'}</td>`;
+        }
+        if (q.type === 'tf' && q.correctAnswers) {
+          const { a, b, c, d } = q.correctAnswers;
+          return `<td style="border:1px solid #333; padding:5px; font-size:9.5pt;">a-${a === 'true' ? 'Đ' : 'S'}, b-${b === 'true' ? 'Đ' : 'S'}, c-${c === 'true' ? 'Đ' : 'S'}, d-${d === 'true' ? 'Đ' : 'S'}</td>`;
+        }
+        if (q.type === 'short') {
+          return `<td style="border:1px solid #333; padding:5px; text-align:center; font-weight:bold; color:#047857;">${q.correctAnswer || '--'}</td>`;
+        }
+        return `<td style="border:1px solid #333; padding:5px; font-size:9.5pt; font-style:italic;">Theo thang điểm</td>`;
+      })
+      .join('');
+
+    compRows += `
+      <tr>
+        <td style="border:1px solid #333; padding:5px; text-align:center; font-weight:bold;">Câu ${qIdx + 1}</td>
+        <td style="border:1px solid #333; padding:5px; text-align:center; font-size:10pt;">${typeLabel}</td>
+        ${answersCells}
+      </tr>
+    `;
+  }
+
+  const comparativeMatrixHtml = `
+    <div class="page-break">
+      <div style="text-align: center; margin-top: 20px; margin-bottom: 16px;">
+        <h2 style="font-size: 13pt; text-transform: uppercase; margin: 0; color:#1e3a8a;">BẢNG TỔNG HỢP ĐÁP ÁN ĐỐI CHIẾU CÁC MÃ ĐỀ THI</h2>
+        <div style="font-size: 10.5pt; margin-top: 4px;">
+          ${escapeHtml(baseTitle)} • Các mã đề: <b>${codes.map((c) => escapeHtml(c)).join(' — ')}</b>
+        </div>
+      </div>
+
+      <table style="width:100%; border-collapse:collapse; font-size:10.5pt;">
+        <thead>
+          <tr style="background-color: #f1f5f9;">
+            <th style="border:1px solid #333; padding:6px; width:10%;">Câu số</th>
+            <th style="border:1px solid #333; padding:6px; width:22%;">Phân loại</th>
+            ${variants.map((v) => `<th style="border:1px solid #333; padding:6px; font-weight:bold; font-size:11pt;">Mã ${escapeHtml(v.code)}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${compRows}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  const printHtml = `
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+      <meta charset="utf-8">
+      <title>${escapeHtml(baseTitle)} - Bộ ${variants.length} Mã Đề</title>
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+      <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+      <style>
+        @page {
+          size: A4;
+          margin: 16mm 14mm 16mm 14mm;
+        }
+        body {
+          font-family: 'Times New Roman', Times, serif;
+          font-size: 12pt;
+          line-height: 1.35;
+          color: #111;
+          background: #fff;
+          margin: 0;
+          padding: 16px;
+        }
+        .header-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 10px;
+        }
+        .header-table td {
+          vertical-align: top;
+          padding: 2px 4px;
+        }
+        .exam-title-box {
+          text-align: center;
+          margin: 10px 0 14px 0;
+          border-bottom: 2px solid #000;
+          padding-bottom: 6px;
+        }
+        .student-info-box {
+          border: 1px solid #333;
+          padding: 5px 10px;
+          margin-bottom: 14px;
+          font-size: 10.5pt;
+        }
+        .part-heading {
+          font-size: 12pt;
+          font-weight: bold;
+          margin-top: 14px;
+          margin-bottom: 4px;
+          border-bottom: 1px solid #555;
+          padding-bottom: 2px;
+        }
+        .part-note {
+          font-style: italic;
+          font-size: 10.5pt;
+          margin-bottom: 8px;
+        }
+        .question-box {
+          margin-bottom: 10px;
+          text-align: justify;
+        }
+        .q-stem {
+          font-style: italic;
+          color: #333;
+          margin-bottom: 2px;
+        }
+        .q-content {
+          font-weight: normal;
+        }
+        .mc-options-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 4px 12px;
+          margin-top: 4px;
+          margin-bottom: 4px;
+        }
+        .tf-options {
+          margin-left: 16px;
+          margin-top: 3px;
+        }
+        .tf-statement {
+          margin-bottom: 2px;
+        }
+        .page-break {
+          page-break-before: always;
+        }
+        .no-print {
+          display: block;
+          background: #2563eb;
+          color: #fff;
+          text-align: center;
+          padding: 10px;
+          font-weight: bold;
+          margin-bottom: 15px;
+          border-radius: 6px;
+          cursor: pointer;
+        }
+        @media print {
+          .no-print { display: none !important; }
+        }
+        img.q-image {
+          max-width: 400px;
+          max-height: 220px;
+          display: block;
+          margin: 6px auto;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="no-print" onclick="window.print()">
+        Nhấn vào đây để In Đề Thi hoặc Lưu dạng Tệp PDF (Trọn Bộ ${variants.length} Mã Đề)
+      </div>
+
+      ${variantsHtml}
+      ${comparativeMatrixHtml}
+
+      <script>
+        document.addEventListener("DOMContentLoaded", function() {
+          renderMathInElement(document.body, {
+            delimiters: [
+              {left: "$$", right: "$$", display: true},
+              {left: "$", right: "$", display: false},
+              {left: "\\\\(", right: "\\\\)", display: false},
+              {left: "\\\\[", right: "\\\\]", display: true}
+            ],
+            throwOnError: false
+          });
+        });
+      </script>
+    </body>
+    </html>
+  `;
+
+  printWindow.document.open();
+  printWindow.document.write(printHtml);
+  printWindow.document.close();
+}
+
+
+/**
  * EXPORT EXAM RESULTS REPORT TO STANDARD EXCEL (.XLSX) WITH SEPARATE COLUMNS
  */
 export function exportResultsToExcel(results: ExamResult[]) {

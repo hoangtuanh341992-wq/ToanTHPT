@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Exam, ExamResult, Question } from '../types';
 import { MathText } from '../utils/mathRenderer';
 import { calculateMOETScore, ScoreBreakdown } from '../utils/scoring';
+import { shuffleExamQuestions, getExamParts } from '../utils/examStructure';
 import {
   STORAGE_KEYS,
   getStorageItem,
@@ -225,45 +226,12 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
       return;
     }
 
-    // Clone questions and apply shuffles if configured
-    let preparedQs = JSON.parse(JSON.stringify(found.questions)) as Question[];
-
-    if (found.shuffleQs) {
-      preparedQs.sort(() => Math.random() - 0.5);
-    }
-
-    if (found.shuffleOpts) {
-      // Shuffle options for MC questions if enabled
-      preparedQs = preparedQs.map((q) => {
-        if (q.type === 'mc' && q.options) {
-          // Keep original content linked to new randomized labels
-          const entries = Object.entries(q.options);
-          const correctKey = q.correctAnswer;
-          const correctValue = q.options[correctKey as 'A' | 'B' | 'C' | 'D'];
-
-          entries.sort(() => Math.random() - 0.5);
-
-          const newOptions: any = {};
-          let newCorrectKey = 'A';
-          const labels = ['A', 'B', 'C', 'D'];
-
-          entries.forEach(([_, val], i) => {
-            const label = labels[i];
-            newOptions[label] = val;
-            if (val === correctValue) {
-              newCorrectKey = label;
-            }
-          });
-
-          return {
-            ...q,
-            options: newOptions,
-            correctAnswer: newCorrectKey,
-          };
-        }
-        return q;
-      });
-    }
+    // Clone questions and apply MOET 3-part shuffles
+    const preparedQs = shuffleExamQuestions(
+      found.questions,
+      !!found.shuffleQs,
+      !!found.shuffleOpts
+    );
 
     setActiveExam(found);
     setActiveQuestions(preparedQs);
@@ -689,179 +657,263 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
           <div className="lg:col-span-3 space-y-6">
             {activeQuestions.map((q, idx) => {
               const currentAns = activeAnswers[idx];
+              const prevQ = idx > 0 ? activeQuestions[idx - 1] : null;
+              const isFirstOfPart = !prevQ || prevQ.type !== q.type;
+
+              let partBanner = null;
+              if (isFirstOfPart) {
+                if (q.type === 'mc') {
+                  partBanner = (
+                    <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-black text-indigo-400 uppercase tracking-wider">
+                          PHẦN I. CÂU TRẮC NGHIỆM NHIỀU PHƯƠNG ÁN LỰA CHỌN (A, B, C, D)
+                        </div>
+                        <div className="text-[11px] text-slate-300 mt-0.5">
+                          Thí sinh chọn một phương án đúng duy nhất cho mỗi câu hỏi.
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2.5 py-1 rounded-lg self-start sm:self-auto font-mono">
+                        0.25 điểm / câu
+                      </span>
+                    </div>
+                  );
+                } else if (q.type === 'tf') {
+                  partBanner = (
+                    <div className="bg-amber-950/40 border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-black text-amber-400 uppercase tracking-wider">
+                          PHẦN II. CÂU TRẮC NGHIỆM ĐÚNG / SAI (a, b, c, d)
+                        </div>
+                        <div className="text-[11px] text-slate-300 mt-0.5">
+                          Trong mỗi ý a), b), c), d) ở từng câu, thí sinh chọn Đúng hoặc Sai.
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2.5 py-1 rounded-lg self-start sm:self-auto font-mono">
+                        Tối đa 1.0 điểm / câu
+                      </span>
+                    </div>
+                  );
+                } else if (q.type === 'short') {
+                  partBanner = (
+                    <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-black text-emerald-400 uppercase tracking-wider">
+                          PHẦN III. CÂU TRẮC NGHIỆM TRẢ LỜI NGẮN
+                        </div>
+                        <div className="text-[11px] text-slate-300 mt-0.5">
+                          Thí sinh điền kết quả vào ô trống tương ứng.
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded-lg self-start sm:self-auto font-mono">
+                        0.50 điểm / câu
+                      </span>
+                    </div>
+                  );
+                } else if (q.type === 'essay') {
+                  partBanner = (
+                    <div className="bg-purple-950/40 border border-purple-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-black text-purple-400 uppercase tracking-wider">
+                          PHẦN IV. CÂU HỎI TỰ LUẬN
+                        </div>
+                        <div className="text-[11px] text-slate-300 mt-0.5">
+                          Thí sinh làm bài tự luận theo yêu cầu.
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 px-2.5 py-1 rounded-lg self-start sm:self-auto font-mono">
+                        Tự luận
+                      </span>
+                    </div>
+                  );
+                }
+              }
 
               return (
-                <div
-                  key={q.id || idx}
-                  id={`live_question_${idx}`}
-                  className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl space-y-4 relative"
-                >
-                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="bg-indigo-600 text-white font-black text-xs px-3 py-1 rounded-xl">
-                        Câu {idx + 1}
+                <React.Fragment key={q.id || idx}>
+                  {partBanner}
+                  <div
+                    id={`live_question_${idx}`}
+                    className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl space-y-4 relative"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-indigo-600 text-white font-black text-xs px-3 py-1 rounded-xl">
+                          Câu {idx + 1}
+                        </span>
+                        <span className="text-xs font-bold text-slate-400">
+                          {q.type === 'mc' ? 'Phần I (ABCD)' : q.type === 'tf' ? 'Phần II (Đ/S)' : q.type === 'short' ? 'Phần III (Ngắn)' : 'Tự luận'}
+                        </span>
+                        <span className="text-xs text-slate-500 font-semibold">• {q.topic}</span>
+                      </div>
+
+                      <span className="text-[11px] font-mono text-slate-400 bg-slate-950 px-2.5 py-0.5 rounded-lg border border-slate-800">
+                        {q.type === 'mc' ? '0.25đ' : q.type === 'tf' ? '1.0đ' : q.type === 'short' ? '0.5đ' : '1.0đ'}
                       </span>
-                      <span className="text-xs font-bold text-slate-400">({q.level})</span>
-                      <span className="text-xs text-slate-500 font-semibold">• {q.topic}</span>
                     </div>
 
-                    <span className="text-[11px] font-mono text-slate-400 bg-slate-950 px-2.5 py-0.5 rounded-lg border border-slate-800">
-                      1.0 điểm
-                    </span>
+                    {/* 1. Stem */}
+                    {q.stem && (
+                      <div className="text-xs text-slate-400 italic bg-slate-950 p-3.5 rounded-2xl border border-slate-800/60">
+                        <MathText text={q.stem} />
+                      </div>
+                    )}
+
+                    {/* 2. Image Attachment */}
+                    {q.image && (
+                      <div className="my-2">
+                        <img
+                          src={q.image}
+                          alt="Question illustration"
+                          className="max-h-60 rounded-2xl border border-slate-800 object-contain mx-auto"
+                        />
+                      </div>
+                    )}
+
+                    {/* 3. Main Question Content */}
+                    <div className="text-sm font-semibold text-white leading-relaxed">
+                      <MathText text={q.content} />
+                    </div>
+
+                    {/* Multiple Choice Answers */}
+                    {q.type === 'mc' && q.options && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
+                        {(['A', 'B', 'C', 'D'] as const).map((optKey) => {
+                          const optVal =
+                            q.options?.[optKey] ?? (q.options as any)?.[optKey.toLowerCase()];
+                          if (optVal === undefined || optVal === null) return null;
+                          const isSelected =
+                            currentAns === optKey ||
+                            (typeof currentAns === 'string' && currentAns.toUpperCase() === optKey);
+                          return (
+                            <label
+                              key={optKey}
+                              className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                                isSelected
+                                  ? 'bg-indigo-950/50 border-indigo-500 text-white shadow-md shadow-indigo-600/10'
+                                  : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-200'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name={`liveAns_${idx}`}
+                                value={optKey}
+                                checked={isSelected}
+                                onChange={() => recordMcAnswer(idx, optKey)}
+                                className="w-4 h-4 text-indigo-600 bg-slate-900 border-slate-700"
+                              />
+                              <div className="text-xs">
+                                <strong className="text-indigo-400 mr-1.5">{optKey}.</strong>
+                                <MathText text={optVal} className="inline" />
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* True / False Answers */}
+                    {q.type === 'tf' && q.statements && (
+                      <div className="space-y-2.5 pt-2">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          Chọn Đúng hoặc Sai cho từng khẳng định:
+                        </p>
+                        {(['a', 'b', 'c', 'd'] as const).map((stKey) => {
+                          const stVal =
+                            q.statements?.[stKey] ?? (q.statements as any)?.[stKey.toUpperCase()];
+                          if (stVal === undefined || stVal === null) return null;
+                          const currentTfVal =
+                            currentAns?.[stKey] ?? (currentAns as any)?.[stKey.toUpperCase()];
+                          return (
+                            <div
+                              key={stKey}
+                              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-950 p-3 rounded-2xl border border-slate-800"
+                            >
+                              <div className="text-xs text-slate-200 flex-1">
+                                <strong className="text-indigo-400 lowercase mr-1.5">{stKey})</strong>
+                                <MathText text={stVal} className="inline" />
+                              </div>
+
+                              <div className="flex gap-2 shrink-0">
+                                <label
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
+                                    currentTfVal === 'true'
+                                      ? 'bg-emerald-950 border-emerald-500 text-emerald-300'
+                                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name={`liveAns_${idx}_${stKey}`}
+                                    value="true"
+                                    checked={currentTfVal === 'true'}
+                                    onChange={() =>
+                                      recordTfAnswer(idx, stKey, 'true')
+                                    }
+                                    className="w-3.5 h-3.5 text-emerald-600 bg-slate-950 border-slate-700"
+                                  />
+                                  <span>Đúng</span>
+                                </label>
+
+                                <label
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
+                                    currentTfVal === 'false'
+                                      ? 'bg-rose-950 border-rose-500 text-rose-300'
+                                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name={`liveAns_${idx}_${stKey}`}
+                                    value="false"
+                                    checked={currentTfVal === 'false'}
+                                    onChange={() =>
+                                      recordTfAnswer(idx, stKey, 'false')
+                                    }
+                                    className="w-3.5 h-3.5 text-rose-600 bg-slate-950 border-slate-700"
+                                  />
+                                  <span>Sai</span>
+                                </label>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Short Answer Input */}
+                    {q.type === 'short' && (
+                      <div className="pt-2 space-y-1.5">
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          Nhập câu trả lời ngắn của bạn:
+                        </label>
+                        <input
+                          type="text"
+                          value={currentAns || ''}
+                          onChange={(e) => recordTextAnswer(idx, e.target.value)}
+                          placeholder="Điền đáp án chính xác..."
+                          className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-3.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono font-semibold"
+                        />
+                      </div>
+                    )}
+
+                    {/* Essay Answer Textarea */}
+                    {q.type === 'essay' && (
+                      <div className="pt-2 space-y-1.5">
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          Nhập bài làm tự luận của bạn:
+                        </label>
+                        <textarea
+                          rows={5}
+                          value={currentAns || ''}
+                          onChange={(e) => recordTextAnswer(idx, e.target.value)}
+                          placeholder="Trình bày các bước làm bài chi tiết..."
+                          className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-3.5 text-xs text-white focus:outline-none focus:border-indigo-500 custom-scrollbar"
+                        />
+                      </div>
+                    )}
                   </div>
-
-                  {/* 1. Stem */}
-                  {q.stem && (
-                    <div className="text-xs text-slate-400 italic bg-slate-950 p-3.5 rounded-2xl border border-slate-800/60">
-                      <MathText text={q.stem} />
-                    </div>
-                  )}
-
-                  {/* 2. Image Attachment */}
-                  {q.image && (
-                    <div className="my-2">
-                      <img
-                        src={q.image}
-                        alt="Question illustration"
-                        className="max-h-60 rounded-2xl border border-slate-800 object-contain mx-auto"
-                      />
-                    </div>
-                  )}
-
-                  {/* 3. Main Question Content */}
-                  <div className="text-sm font-semibold text-white leading-relaxed">
-                    <MathText text={q.content} />
-                  </div>
-
-                  {/* Multiple Choice Answers */}
-                  {q.type === 'mc' && q.options && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
-                      {Object.entries(q.options).map(([optKey, optVal]) => {
-                        const isSelected = currentAns === optKey;
-                        return (
-                          <label
-                            key={optKey}
-                            className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                              isSelected
-                                ? 'bg-indigo-950/50 border-indigo-500 text-white shadow-md shadow-indigo-600/10'
-                                : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-200'
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name={`liveAns_${idx}`}
-                              value={optKey}
-                              checked={isSelected}
-                              onChange={() => recordMcAnswer(idx, optKey)}
-                              className="w-4 h-4 text-indigo-600 bg-slate-900 border-slate-700"
-                            />
-                            <div className="text-xs">
-                              <strong className="text-indigo-400 mr-1.5">{optKey}.</strong>
-                              <MathText text={optVal} className="inline" />
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* True / False Answers */}
-                  {q.type === 'tf' && q.statements && (
-                    <div className="space-y-2.5 pt-2">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                        Chọn Đúng hoặc Sai cho từng khẳng định:
-                      </p>
-                      {Object.entries(q.statements).map(([stKey, stVal]) => {
-                        const currentTfVal = currentAns?.[stKey];
-                        return (
-                          <div
-                            key={stKey}
-                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-950 p-3 rounded-2xl border border-slate-800"
-                          >
-                            <div className="text-xs text-slate-200 flex-1">
-                              <strong className="text-indigo-400 uppercase mr-1.5">{stKey})</strong>
-                              <MathText text={stVal} className="inline" />
-                            </div>
-
-                            <div className="flex gap-2 shrink-0">
-                              <label
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
-                                  currentTfVal === 'true'
-                                    ? 'bg-emerald-950 border-emerald-500 text-emerald-300'
-                                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
-                                }`}
-                              >
-                                <input
-                                  type="radio"
-                                  name={`liveAns_${idx}_${stKey}`}
-                                  value="true"
-                                  checked={currentTfVal === 'true'}
-                                  onChange={() =>
-                                    recordTfAnswer(idx, stKey as 'a' | 'b' | 'c' | 'd', 'true')
-                                  }
-                                  className="w-3.5 h-3.5 text-emerald-600 bg-slate-950 border-slate-700"
-                                />
-                                <span>Đúng</span>
-                              </label>
-
-                              <label
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
-                                  currentTfVal === 'false'
-                                    ? 'bg-rose-950 border-rose-500 text-rose-300'
-                                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
-                                }`}
-                              >
-                                <input
-                                  type="radio"
-                                  name={`liveAns_${idx}_${stKey}`}
-                                  value="false"
-                                  checked={currentTfVal === 'false'}
-                                  onChange={() =>
-                                    recordTfAnswer(idx, stKey as 'a' | 'b' | 'c' | 'd', 'false')
-                                  }
-                                  className="w-3.5 h-3.5 text-rose-600 bg-slate-950 border-slate-700"
-                                />
-                                <span>Sai</span>
-                              </label>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Short Answer Input */}
-                  {q.type === 'short' && (
-                    <div className="pt-2 space-y-1.5">
-                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
-                        Nhập câu trả lời ngắn của bạn:
-                      </label>
-                      <input
-                        type="text"
-                        value={currentAns || ''}
-                        onChange={(e) => recordTextAnswer(idx, e.target.value)}
-                        placeholder="Điền đáp án chính xác..."
-                        className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-3.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono font-semibold"
-                      />
-                    </div>
-                  )}
-
-                  {/* Essay Answer Textarea */}
-                  {q.type === 'essay' && (
-                    <div className="pt-2 space-y-1.5">
-                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
-                        Nhập bài làm tự luận của bạn:
-                      </label>
-                      <textarea
-                        rows={5}
-                        value={currentAns || ''}
-                        onChange={(e) => recordTextAnswer(idx, e.target.value)}
-                        placeholder="Trình bày các bước làm bài chi tiết..."
-                        className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-3.5 text-xs text-white focus:outline-none focus:border-indigo-500 custom-scrollbar"
-                      />
-                    </div>
-                  )}
-                </div>
+                </React.Fragment>
               );
             })}
           </div>
@@ -878,24 +930,51 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
                 </span>
               </div>
 
-              <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-72 overflow-y-auto pr-1">
-                {activeQuestions.map((q, idx) => {
-                  const answered = isQuestionAnswered(idx, q);
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => scrollToQuestion(idx)}
-                      className={`h-9 rounded-xl font-bold font-mono text-xs transition-all flex items-center justify-center border ${
-                        answered
-                          ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/20'
-                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-white'
-                      }`}
-                    >
-                      {idx + 1}
-                    </button>
-                  );
-                })}
+              {/* Grouped by Parts Navigator */}
+              <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                {(() => {
+                  const parts = [
+                    { type: 'mc', title: 'Phần I: ABCD', color: 'text-indigo-400' },
+                    { type: 'tf', title: 'Phần II: Đúng / Sai', color: 'text-amber-400' },
+                    { type: 'short', title: 'Phần III: Trả lời ngắn', color: 'text-emerald-400' },
+                    { type: 'essay', title: 'Tự luận', color: 'text-purple-400' },
+                  ];
+
+                  return parts.map((p) => {
+                    const questionsInPart = activeQuestions
+                      .map((q, idx) => ({ q, idx }))
+                      .filter((item) => item.q.type === p.type);
+
+                    if (questionsInPart.length === 0) return null;
+
+                    return (
+                      <div key={p.type} className="space-y-1.5">
+                        <div className={`text-[10px] font-bold uppercase tracking-wider ${p.color}`}>
+                          {p.title} ({questionsInPart.length})
+                        </div>
+                        <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5">
+                          {questionsInPart.map(({ q, idx }) => {
+                            const answered = isQuestionAnswered(idx, q);
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => scrollToQuestion(idx)}
+                                className={`h-8 rounded-xl font-bold font-mono text-xs transition-all flex items-center justify-center border ${
+                                  answered
+                                    ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/20'
+                                    : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-white'
+                                }`}
+                              >
+                                {idx + 1}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
 
               <button

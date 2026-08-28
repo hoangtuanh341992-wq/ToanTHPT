@@ -320,8 +320,14 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
                 {/* Options display */}
                 {q.type === 'mc' && q.options && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
-                    {Object.entries(q.options).map(([optKey, optVal]) => {
-                      const isCorrect = q.correctAnswer === optKey;
+                    {(['A', 'B', 'C', 'D'] as const).map((optKey) => {
+                      const optVal =
+                        q.options?.[optKey] ?? (q.options as any)?.[optKey.toLowerCase()];
+                      if (optVal === undefined || optVal === null) return null;
+                      const isCorrect =
+                        q.correctAnswer === optKey ||
+                        (typeof q.correctAnswer === 'string' &&
+                          q.correctAnswer.toUpperCase() === optKey);
                       return (
                         <div
                           key={optKey}
@@ -341,15 +347,20 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
 
                 {q.type === 'tf' && q.statements && (
                   <div className="space-y-1 text-xs pt-1">
-                    {Object.entries(q.statements).map(([stKey, stVal]) => {
-                      const ansVal = q.correctAnswers?.[stKey as 'a' | 'b' | 'c' | 'd'];
+                    {(['a', 'b', 'c', 'd'] as const).map((stKey) => {
+                      const stVal =
+                        q.statements?.[stKey] ?? (q.statements as any)?.[stKey.toUpperCase()];
+                      if (stVal === undefined || stVal === null) return null;
+                      const ansVal =
+                        q.correctAnswers?.[stKey] ??
+                        (q.correctAnswers as any)?.[stKey.toUpperCase()];
                       return (
                         <div
                           key={stKey}
                           className="flex items-center justify-between bg-slate-900/60 p-2 rounded-xl border border-slate-800"
                         >
                           <div className="flex items-center gap-1 text-slate-200">
-                            <span className="font-bold text-indigo-400 uppercase w-4">{stKey})</span>
+                            <span className="font-bold text-indigo-400 lowercase w-4">{stKey})</span>
                             <MathText text={stVal} className="inline" />
                           </div>
                           <span

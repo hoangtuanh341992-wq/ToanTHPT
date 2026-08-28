@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Question, QuestionType, QuestionLevel } from '../types';
 import { MathText } from '../utils/mathRenderer';
+import { getExamParts, sortQuestionsByMOETStructure } from '../utils/examStructure';
 import {
   STORAGE_KEYS,
   getStorageItem,
@@ -22,6 +23,9 @@ import {
   Rocket,
   Layers,
   HelpCircle,
+  CheckCircle2,
+  ShieldCheck,
+  ListOrdered,
 } from 'lucide-react';
 
 interface TabCreateExamProps {
@@ -341,6 +345,13 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
     showToast('Đã xóa câu hỏi khỏi bản nháp', 'info');
   };
 
+  const handleAutoSortMOET = () => {
+    if (draftingQuestions.length === 0) return;
+    const sorted = sortQuestionsByMOETStructure(draftingQuestions);
+    onDraftQuestionsChange(sorted);
+    showToast('Đã tự động sắp xếp cấu trúc 3 phần (Phần I -> Phần II -> Phần III)!', 'success');
+  };
+
   const handleParseRawText = () => {
     if (!rawText.trim()) {
       showToast('Vui lòng dán nội dung văn bản đề thi!', 'error');
@@ -362,7 +373,7 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
       const firstLine = lines[0];
       const contentStr = firstLine.replace(/^Câu\s+\d+[:\.]\s*/i, '');
 
-      const isTfBlock = lines.some((l) => /^[a-d]\)/i.test(l));
+      const isTfBlock = lines.some((l) => /^[\(]?[a-d][\)\.]/i.test(l.trim()));
 
       if (isTfBlock) {
         // True/False question
@@ -375,20 +386,19 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
         };
 
         lines.slice(1).forEach((l) => {
-          ['a', 'b', 'c', 'd'].forEach((key) => {
-            const regex = new RegExp(`^${key}\\)\\s*(.*)`, 'i');
-            if (regex.test(l)) {
-              let text = l.replace(regex, '$1').trim();
-              if (/\b(sai|false|s)\b/i.test(text)) {
-                corrects[key as 'a' | 'b' | 'c' | 'd'] = 'false';
-                text = text.replace(/[-:]\s*(sai|false|s)/i, '').trim();
-              } else if (/\b(đúng|true|đ)\b/i.test(text)) {
-                corrects[key as 'a' | 'b' | 'c' | 'd'] = 'true';
-                text = text.replace(/[-:]\s*(đúng|true|đ)/i, '').trim();
-              }
-              statements[key as 'a' | 'b' | 'c' | 'd'] = text;
+          const match = l.trim().match(/^[\(]?([a-d])[\)\.]\s*(.*)/i);
+          if (match) {
+            const key = match[1].toLowerCase() as 'a' | 'b' | 'c' | 'd';
+            let text = match[2].trim();
+            if (/\b(sai|false|s)\b/i.test(text)) {
+              corrects[key] = 'false';
+              text = text.replace(/[-:\*]\s*(sai|false|s)\s*$/i, '').trim();
+            } else if (/\b(đúng|true|đ)\b/i.test(text)) {
+              corrects[key] = 'true';
+              text = text.replace(/[-:\*]\s*(đúng|true|đ)\s*$/i, '').trim();
             }
-          });
+            statements[key] = text;
+          }
         });
 
         parsedList.push({
@@ -408,12 +418,14 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
         let correctAnswer = 'A';
 
         lines.slice(1).forEach((l) => {
-          if (/^A[\.\:]/i.test(l)) options.A = l.replace(/^A[\.\:]\s*/i, '');
-          if (/^B[\.\:]/i.test(l)) options.B = l.replace(/^B[\.\:]\s*/i, '');
-          if (/^C[\.\:]/i.test(l)) options.C = l.replace(/^C[\.\:]\s*/i, '');
-          if (/^D[\.\:]/i.test(l)) options.D = l.replace(/^D[\.\:]\s*/i, '');
-          if (/^\*?Đáp\s*án\s*[:\.]?\s*([A-D])/i.test(l)) {
-            const m = l.match(/^\*?Đáp\s*án\s*[:\.]?\s*([A-D])/i);
+          const trimmed = l.trim();
+          const match = trimmed.match(/^[\(]?([A-D])[\)\.\:\-]\s*(.*)/i);
+          if (match) {
+            const key = match[1].toUpperCase() as 'A' | 'B' | 'C' | 'D';
+            options[key] = match[2].trim();
+          }
+          if (/^\*?Đáp\s*án\s*[:\.]?\s*([A-D])/i.test(trimmed)) {
+            const m = trimmed.match(/^\*?Đáp\s*án\s*[:\.]?\s*([A-D])/i);
             if (m) correctAnswer = m[1].toUpperCase();
           }
         });
@@ -511,27 +523,47 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
         <div className="bg-slate-900/90 rounded-3xl border border-slate-800 p-6 sm:p-7 shadow-xl space-y-6">
           {/* Question Type selector */}
           <div className="space-y-2">
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Dạng Câu Hỏi
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Dạng Câu Hỏi &amp; Phần Thi Tương Ứng
+              </label>
+              <span className="text-[11px] font-medium text-indigo-400">
+                Đề thi chuẩn cấu trúc 3 phần: Phần I &rarr; Phần II &rarr; Phần III
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               {[
-                { type: 'mc', label: 'Trắc nghiệm ABCD' },
-                { type: 'tf', label: 'Trắc nghiệm Đúng / Sai' },
-                { type: 'short', label: 'Trả lời ngắn' },
-                { type: 'essay', label: 'Tự luận' },
+                { type: 'mc', part: 'PHẦN I', label: 'Trắc nghiệm ABCD', sub: 'Xáo trộn câu & phương án (A,B,C,D)' },
+                { type: 'tf', part: 'PHẦN II', label: 'Trắc nghiệm Đúng/Sai', sub: 'Xáo trộn câu, KHÔNG xáo trộn ý a,b,c,d' },
+                { type: 'short', part: 'PHẦN III', label: 'Trả lời ngắn', sub: 'Xáo trộn thứ tự các câu' },
+                { type: 'essay', part: 'MỞ RỘNG', label: 'Tự luận', sub: 'Dàn ý & chấm điểm giáo viên' },
               ].map((item) => (
                 <button
                   key={item.type}
                   type="button"
                   onClick={() => setCurrentFmType(item.type as QuestionType)}
-                  className={`p-3 rounded-2xl border text-xs font-bold transition-all text-center ${
+                  className={`p-3.5 rounded-2xl border text-left transition-all ${
                     currentFmType === item.type
                       ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/30'
                       : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-indigo-500/50'
                   }`}
                 >
-                  {item.label}
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                      currentFmType === item.type
+                        ? 'bg-white/20 text-white'
+                        : 'bg-indigo-950 text-indigo-400 border border-indigo-500/30'
+                    }`}>
+                      {item.part}
+                    </span>
+                    {currentFmType === item.type && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                  <div className="text-xs font-black">{item.label}</div>
+                  <div className={`text-[10px] mt-0.5 leading-tight line-clamp-1 ${
+                    currentFmType === item.type ? 'text-indigo-100' : 'text-slate-500'
+                  }`}>
+                    {item.sub}
+                  </div>
                 </button>
               ))}
             </div>
@@ -884,15 +916,70 @@ b) $2 + 2 = 5$ - Sai`}
 
       {/* DRAFTING QUESTIONS PREVIEW LIST */}
       <div className="space-y-4 pt-2">
-        <div className="flex items-center justify-between">
-          <h3 className="font-extrabold text-lg text-white flex items-center gap-2.5">
-            <Layers className="w-5 h-5 text-indigo-400" />
-            <span>Danh Sách Câu Hỏi Đang Tạo</span>
-            <span className="text-xs font-bold bg-indigo-500/20 text-indigo-400 px-3 py-1 rounded-full border border-indigo-500/30 font-mono">
-              {draftingQuestions.length} câu
-            </span>
-          </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/80 p-4 sm:p-5 rounded-2xl border border-slate-800">
+          <div>
+            <h3 className="font-extrabold text-base sm:text-lg text-white flex items-center gap-2.5">
+              <Layers className="w-5 h-5 text-indigo-400" />
+              <span>Cấu Trúc &amp; Danh Sách Câu Hỏi Đang Soạn</span>
+              <span className="text-xs font-bold bg-indigo-500/20 text-indigo-400 px-3 py-1 rounded-full border border-indigo-500/30 font-mono">
+                Tổng {draftingQuestions.length} câu
+              </span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Đề thi tuân thủ cấu trúc 3 phần từ trên xuống dưới theo quy chuẩn Bộ GD&amp;ĐT.
+            </p>
+          </div>
+
+          {draftingQuestions.length > 0 && (
+            <button
+              type="button"
+              onClick={handleAutoSortMOET}
+              className="bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 hover:text-white border border-indigo-500/40 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 shadow-sm"
+              title="Tự động xếp Phần I (Trắc nghiệm ABCD) -> Phần II (Đúng/Sai) -> Phần III (Trả lời ngắn)"
+            >
+              <ListOrdered className="w-4 h-4 text-indigo-400" />
+              <span>Sắp Xếp Chuẩn 3 Phần</span>
+            </button>
+          )}
         </div>
+
+        {/* 3-Part Summary Badges */}
+        {draftingQuestions.length > 0 && (() => {
+          const { part1, part2, part3, part4 } = getExamParts(draftingQuestions);
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="bg-slate-900/60 p-3 rounded-2xl border border-slate-800 flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider">PHẦN I: Trắc nghiệm ABCD</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Xáo câu &amp; xáo phương án (A,B,C,D)</div>
+                </div>
+                <span className="text-sm font-black font-mono bg-indigo-950 text-indigo-300 border border-indigo-800/60 px-2.5 py-1 rounded-xl">
+                  {part1.length} câu
+                </span>
+              </div>
+
+              <div className="bg-slate-900/60 p-3 rounded-2xl border border-slate-800 flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">PHẦN II: Đúng / Sai</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Xáo câu, KHÔNG xáo ý a,b,c,d</div>
+                </div>
+                <span className="text-sm font-black font-mono bg-amber-950 text-amber-300 border border-amber-800/60 px-2.5 py-1 rounded-xl">
+                  {part2.length} câu
+                </span>
+              </div>
+
+              <div className="bg-slate-900/60 p-3 rounded-2xl border border-slate-800 flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">PHẦN III: Trả lời ngắn</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Xáo trộn thứ tự các câu</div>
+                </div>
+                <span className="text-sm font-black font-mono bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-2.5 py-1 rounded-xl">
+                  {part3.length} câu
+                </span>
+              </div>
+            </div>
+          );
+        })()}
 
         {draftingQuestions.length === 0 ? (
           <div className="text-center py-16 bg-slate-900/50 rounded-3xl border border-dashed border-slate-800 space-y-2">
@@ -904,148 +991,233 @@ b) $2 + 2 = 5$ - Sai`}
           </div>
         ) : (
           <div className="space-y-4">
-            {draftingQuestions.map((q, idx) => (
-              <div
-                key={q.id || idx}
-                className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-md space-y-3 relative hover:border-slate-700 transition-colors"
-              >
-                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="bg-indigo-600 text-white font-black text-xs px-3 py-1 rounded-xl">
-                      Câu {idx + 1}
-                    </span>
-                    <span className="text-[11px] font-bold bg-slate-800 text-indigo-300 px-2.5 py-1 rounded-xl uppercase">
-                      {q.type}
-                    </span>
-                    <span className="text-[11px] font-bold bg-slate-800 text-slate-300 px-2.5 py-1 rounded-xl">
-                      {q.level}
-                    </span>
-                    <span className="text-xs text-slate-400 font-semibold">• {q.topic}</span>
-                  </div>
+            {draftingQuestions.map((q, idx) => {
+              // Check if this question starts a new part
+              const prevQ = idx > 0 ? draftingQuestions[idx - 1] : null;
+              const isFirstOfPart = !prevQ || prevQ.type !== q.type;
 
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleMoveQuestion(idx, 'up')}
-                      disabled={idx === 0}
-                      className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white disabled:opacity-30"
-                      title="Di chuyển lên"
-                    >
-                      <ArrowUp className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleMoveQuestion(idx, 'down')}
-                      disabled={idx === draftingQuestions.length - 1}
-                      className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white disabled:opacity-30"
-                      title="Di chuyển xuống"
-                    >
-                      <ArrowDown className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDuplicateQuestion(idx)}
-                      className="p-1.5 rounded-lg bg-slate-800 text-indigo-300 hover:text-white"
-                      title="Nhân bản câu này"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => loadQuestionToForm(q, idx)}
-                      className="text-xs font-bold text-amber-400 px-2.5 py-1 bg-amber-950/40 hover:bg-amber-900/60 rounded-xl border border-amber-800/40 transition-all flex items-center gap-1"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                      <span>Sửa</span>
-                    </button>
-                    <button
-                      onClick={() => handleDeleteQuestion(idx)}
-                      className="text-xs font-bold text-rose-400 px-2.5 py-1 bg-rose-950/40 hover:bg-rose-900/60 rounded-xl border border-rose-800/40 transition-all flex items-center gap-1"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Xóa</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* STRICT ORDER: 1. STEM -> 2. IMAGE -> 3. CONTENT */}
-                {q.stem && (
-                  <div className="text-xs text-slate-400 italic bg-slate-950 p-3 rounded-xl border border-slate-800/60">
-                    <MathText text={q.stem} />
-                  </div>
-                )}
-
-                {q.image && (
-                  <div>
-                    <img
-                      src={q.image}
-                      alt="Question attachment"
-                      className="max-h-48 rounded-xl border border-slate-800 my-1 object-contain"
-                    />
-                  </div>
-                )}
-
-                <div className="text-sm font-semibold text-white leading-relaxed">
-                  <MathText text={q.content} />
-                </div>
-
-                {/* Multiple choice options */}
-                {q.type === 'mc' && q.options && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
-                    {Object.entries(q.options).map(([optKey, optVal]) => {
-                      const isCorrect = q.correctAnswer === optKey;
-                      return (
-                        <div
-                          key={optKey}
-                          className={`p-2.5 rounded-xl border ${
-                            isCorrect
-                              ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300 font-bold'
-                              : 'bg-slate-950 border-slate-800 text-slate-300'
-                          }`}
-                        >
-                          <span className="font-black text-indigo-400 mr-1.5">{optKey}.</span>
-                          <MathText text={optVal} className="inline" />
+              let partHeader = null;
+              if (isFirstOfPart) {
+                if (q.type === 'mc') {
+                  partHeader = (
+                    <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-2xl p-4 mt-6 first:mt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-black text-indigo-400 uppercase tracking-wider">
+                          PHẦN I. CÂU TRẮC NGHIỆM NHIỀU PHƯƠNG ÁN LỰA CHỌN (A, B, C, D)
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* True/False statements */}
-                {q.type === 'tf' && q.statements && (
-                  <div className="space-y-1.5 text-xs pt-1">
-                    {Object.entries(q.statements).map(([stKey, stVal]) => {
-                      const isTrue = q.correctAnswers?.[stKey as 'a' | 'b' | 'c' | 'd'] === 'true';
-                      return (
-                        <div
-                          key={stKey}
-                          className="flex items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800"
-                        >
-                          <div className="flex items-center gap-1.5 text-slate-200">
-                            <strong className="text-indigo-400 uppercase w-4">{stKey})</strong>
-                            <MathText text={stVal} className="inline" />
-                          </div>
-                          <span
-                            className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase ${
-                              isTrue
-                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                            }`}
-                          >
-                            {isTrue ? 'Đúng' : 'Sai'}
-                          </span>
+                        <div className="text-[11px] text-slate-300 mt-0.5">
+                          Thí sinh chọn một phương án đúng duy nhất. Cho phép xáo trộn câu và xáo trộn 4 phương án (trình tự luôn giữ A, B, C, D).
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      </div>
+                      <span className="text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2.5 py-1 rounded-lg self-start sm:self-auto font-mono">
+                        0.25đ / câu
+                      </span>
+                    </div>
+                  );
+                } else if (q.type === 'tf') {
+                  partHeader = (
+                    <div className="bg-amber-950/40 border border-amber-500/30 rounded-2xl p-4 mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-black text-amber-400 uppercase tracking-wider">
+                          PHẦN II. CÂU TRẮC NGHIỆM ĐÚNG / SAI (4 Ý a, b, c, d)
+                        </div>
+                        <div className="text-[11px] text-slate-300 mt-0.5">
+                          Trong mỗi ý a), b), c), d) chọn Đúng hoặc Sai. Cho phép xáo trộn câu, <strong className="text-amber-300">TUYỆT ĐỐI KHÔNG xáo trộn các ý trong mỗi câu</strong> (luôn giữ nguyên a, b, c, d).
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2.5 py-1 rounded-lg self-start sm:self-auto font-mono">
+                        Tối đa 1.0đ / câu
+                      </span>
+                    </div>
+                  );
+                } else if (q.type === 'short') {
+                  partHeader = (
+                    <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-2xl p-4 mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-black text-emerald-400 uppercase tracking-wider">
+                          PHẦN III. CÂU TRẮC NGHIỆM TRẢ LỜI NGẮN
+                        </div>
+                        <div className="text-[11px] text-slate-300 mt-0.5">
+                          Thí sinh điền kết quả vào ô trống tương ứng. Cho phép xáo trộn thứ tự các câu hỏi.
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded-lg self-start sm:self-auto font-mono">
+                        0.50đ / câu
+                      </span>
+                    </div>
+                  );
+                } else if (q.type === 'essay') {
+                  partHeader = (
+                    <div className="bg-purple-950/40 border border-purple-500/30 rounded-2xl p-4 mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-black text-purple-400 uppercase tracking-wider">
+                          PHẦN IV. CÂU HỎI TỰ LUẬN
+                        </div>
+                        <div className="text-[11px] text-slate-300 mt-0.5">
+                          Thí sinh làm bài tự luận theo yêu cầu.
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 px-2.5 py-1 rounded-lg self-start sm:self-auto font-mono">
+                        Tự luận
+                      </span>
+                    </div>
+                  );
+                }
+              }
 
-                {q.type === 'short' && (
-                  <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs">
-                    <span className="text-slate-400 font-bold">Đáp án đúng chuẩn: </span>
-                    <strong className="text-emerald-400 font-mono font-bold">
-                      {q.correctAnswer || '--'}
-                    </strong>
+              return (
+                <React.Fragment key={q.id || idx}>
+                  {partHeader}
+                  <div
+                    className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-md space-y-3 relative hover:border-slate-700 transition-colors"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="bg-indigo-600 text-white font-black text-xs px-3 py-1 rounded-xl">
+                          Câu {idx + 1}
+                        </span>
+                        <span className="text-[11px] font-bold bg-slate-800 text-indigo-300 px-2.5 py-1 rounded-xl uppercase">
+                          {q.type === 'mc' ? 'Phần I (ABCD)' : q.type === 'tf' ? 'Phần II (Đ/S)' : q.type === 'short' ? 'Phần III (Ngắn)' : 'Tự luận'}
+                        </span>
+                        <span className="text-[11px] font-bold bg-slate-800 text-slate-300 px-2.5 py-1 rounded-xl">
+                          {q.level}
+                        </span>
+                        <span className="text-xs text-slate-400 font-semibold">• {q.topic}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleMoveQuestion(idx, 'up')}
+                          disabled={idx === 0}
+                          className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white disabled:opacity-30"
+                          title="Di chuyển lên"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleMoveQuestion(idx, 'down')}
+                          disabled={idx === draftingQuestions.length - 1}
+                          className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white disabled:opacity-30"
+                          title="Di chuyển xuống"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDuplicateQuestion(idx)}
+                          className="p-1.5 rounded-lg bg-slate-800 text-indigo-300 hover:text-white"
+                          title="Nhân bản câu này"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => loadQuestionToForm(q, idx)}
+                          className="text-xs font-bold text-amber-400 px-2.5 py-1 bg-amber-950/40 hover:bg-amber-900/60 rounded-xl border border-amber-800/40 transition-all flex items-center gap-1"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Sửa</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteQuestion(idx)}
+                          className="text-xs font-bold text-rose-400 px-2.5 py-1 bg-rose-950/40 hover:bg-rose-900/60 rounded-xl border border-rose-800/40 transition-all flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Xóa</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* STRICT ORDER: 1. STEM -> 2. IMAGE -> 3. CONTENT */}
+                    {q.stem && (
+                      <div className="text-xs text-slate-400 italic bg-slate-950 p-3 rounded-xl border border-slate-800/60">
+                        <MathText text={q.stem} />
+                      </div>
+                    )}
+
+                    {q.image && (
+                      <div>
+                        <img
+                          src={q.image}
+                          alt="Question attachment"
+                          className="max-h-48 rounded-xl border border-slate-800 my-1 object-contain"
+                        />
+                      </div>
+                    )}
+
+                    <div className="text-sm font-semibold text-white leading-relaxed">
+                      <MathText text={q.content} />
+                    </div>
+
+                    {/* Multiple choice options */}
+                    {q.type === 'mc' && q.options && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                        {(['A', 'B', 'C', 'D'] as const).map((optKey) => {
+                          const optVal =
+                            q.options?.[optKey] ?? (q.options as any)?.[optKey.toLowerCase()];
+                          if (optVal === undefined || optVal === null) return null;
+                          const isCorrect = q.correctAnswer === optKey;
+                          return (
+                            <div
+                              key={optKey}
+                              className={`p-2.5 rounded-xl border ${
+                                isCorrect
+                                  ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300 font-bold'
+                                  : 'bg-slate-950 border-slate-800 text-slate-300'
+                              }`}
+                            >
+                              <span className="font-black text-indigo-400 mr-1.5">{optKey}.</span>
+                              <MathText text={optVal} className="inline" />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* True/False statements */}
+                    {q.type === 'tf' && q.statements && (
+                      <div className="space-y-1.5 text-xs pt-1">
+                        {(['a', 'b', 'c', 'd'] as const).map((stKey) => {
+                          const stVal =
+                            q.statements?.[stKey] ?? (q.statements as any)?.[stKey.toUpperCase()];
+                          if (stVal === undefined || stVal === null) return null;
+                          const isTrue =
+                            (q.correctAnswers?.[stKey] ??
+                              (q.correctAnswers as any)?.[stKey.toUpperCase()]) === 'true';
+                          return (
+                            <div
+                              key={stKey}
+                              className="flex items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800"
+                            >
+                              <div className="flex items-center gap-1.5 text-slate-200">
+                                <strong className="text-indigo-400 lowercase w-4">{stKey})</strong>
+                                <MathText text={stVal} className="inline" />
+                              </div>
+                              <span
+                                className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase ${
+                                  isTrue
+                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                    : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                                }`}
+                              >
+                                {isTrue ? 'Đúng' : 'Sai'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {q.type === 'short' && (
+                      <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs">
+                        <span className="text-slate-400 font-bold">Đáp án đúng chuẩn: </span>
+                        <strong className="text-emerald-400 font-mono font-bold">
+                          {q.correctAnswer || '--'}
+                        </strong>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                </React.Fragment>
+              );
+            })}
 
             {/* BOTTOM PUBLISH & SAVE ACTIONS */}
             <div className="space-y-3 pt-4">

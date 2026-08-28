@@ -32,10 +32,11 @@ import { TabManageExams } from './components/TabManageExams';
 import { TabResults } from './components/TabResults';
 import { AuthModal } from './components/AuthModal';
 import { TeacherManagementModal } from './components/TeacherManagementModal';
-import { PublishModal } from './components/PublishModal';
+import { PublishModal, PublishConfirmData } from './components/PublishModal';
 import { EditExamModal } from './components/EditExamModal';
 import { QuestionBankModal } from './components/QuestionBankModal';
 import { ToastContainer } from './components/ToastContainer';
+import { generateExamVariants } from './utils/examStructure';
 
 export default function App() {
   // Navigation & Role State
@@ -328,52 +329,52 @@ export default function App() {
     showToast(`Đã đồng bộ toàn bộ ${draftingQuestions.length} câu hỏi lên Ngân hàng đám mây!`, 'success');
   };
 
-  const handleConfirmPublish = (data: {
-    title: string;
-    code: string;
-    duration: number;
-    shuffleQs: boolean;
-    shuffleOpts: boolean;
-    description: string;
-  }) => {
+  const handleConfirmPublish = (data: PublishConfirmData) => {
     if (draftingQuestions.length === 0) {
       showToast('Cần ít nhất 1 câu hỏi để xuất bản đề thi!', 'error');
       return;
     }
 
-    // Check duplicate code
-    if (exams.some((e) => e.code.toUpperCase() === data.code.toUpperCase())) {
-      showToast(`Mã đề "${data.code}" đã tồn tại! Vui lòng chọn mã khác.`, 'error');
+    const count = Math.min(4, Math.max(1, data.variantCount || 1));
+    const activeCodes = data.variantCodes.slice(0, count);
+
+    // Check duplicate codes
+    const existingCodeSet = new Set(exams.map((e) => e.code.toUpperCase()));
+    const duplicates = activeCodes.filter((c) => existingCodeSet.has(c.toUpperCase()));
+    if (duplicates.length > 0) {
+      showToast(`Mã đề "${duplicates.join(', ')}" đã tồn tại trên hệ thống! Vui lòng chọn mã khác.`, 'error');
       return;
     }
 
-    const stampedQs = draftingQuestions.map((q) => ({
-      ...q,
-      authorId: q.authorId || currentUser?.id || 'admin',
-      authorName: q.authorName || currentUser?.displayName || 'Quản trị viên',
-      authorUsername: q.authorUsername || currentUser?.username || 'admin',
-    }));
-
-    const newExam: Exam = {
-      id: 'exam-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
-      title: data.title,
-      code: data.code,
+    // Generate variants
+    const generatedVariants = generateExamVariants(draftingQuestions, {
+      variantCount: count,
+      baseTitle: data.title,
+      baseCode: data.code,
       duration: data.duration,
+      description: data.description,
       shuffleQs: data.shuffleQs,
       shuffleOpts: data.shuffleOpts,
-      description: data.description,
-      createdAt: new Date().toLocaleDateString('vi-VN'),
+      variantCodes: activeCodes,
+      keepMasterAsFirst: data.keepMasterAsFirst,
       authorId: currentUser?.id || 'admin',
       authorName: currentUser?.displayName || 'Quản trị viên',
       authorUsername: currentUser?.username || 'admin',
-      questions: stampedQs,
-    };
+    });
 
-    setExams((prev) => [newExam, ...prev]);
-    saveExamToCloud(newExam);
+    setExams((prev) => [...generatedVariants, ...prev]);
+    generatedVariants.forEach((exam) => saveExamToCloud(exam));
+
     setDraftingQuestions([]);
     setIsPublishOpen(false);
-    showToast(`Xuất bản đề thi "${data.title}" lên Đám mây thành công! Học sinh đã có thể nhập mã ${data.code} để thi.`, 'success');
+
+    if (count === 1) {
+      showToast(`Xuất bản đề thi "${data.title}" lên Đám mây thành công! Học sinh có thể nhập mã ${data.code} để thi.`, 'success');
+    } else {
+      const codeList = activeCodes.join(', ');
+      showToast(`Đã tạo và xuất bản trọn bộ ${count} mã đề (${codeList}) lên Đám mây thành công!`, 'success');
+    }
+
     setCurrentTab('manage');
   };
 
@@ -638,6 +639,7 @@ export default function App() {
         onClose={() => setIsPublishOpen(false)}
         onConfirm={handleConfirmPublish}
         defaultQuestionCount={draftingQuestions.length}
+        masterQuestions={draftingQuestions}
       />
 
       {/* Edit Exam Metadata Modal */}
