@@ -31,6 +31,10 @@ export interface Question {
     d: 'true' | 'false';
   };
   guide?: string; // Hướng dẫn chấm / tự luận
+  authorId?: string; // ID tài khoản giáo viên tạo câu hỏi
+  authorName?: string; // Tên hiển thị giáo viên tạo câu hỏi
+  authorUsername?: string; // Tên đăng nhập giáo viên tạo câu hỏi
+  createdAt?: string;
 }
 
 export interface Exam {
@@ -43,6 +47,9 @@ export interface Exam {
   createdAt: string;
   questions: Question[];
   description?: string;
+  authorId?: string; // ID tài khoản giáo viên tạo đề
+  authorName?: string; // Tên hiển thị giáo viên tạo đề
+  authorUsername?: string;
 }
 
 export interface ExamResult {
@@ -57,6 +64,8 @@ export interface ExamResult {
   submittedAt: string;
   durationSpentSeconds?: number;
   answers?: Record<string, any>;
+  examAuthorId?: string; // ID giáo viên sở hữu đề thi này
+  examAuthorName?: string;
   scoreBreakdown?: {
     part1Earned?: number;
     part1Max?: number;

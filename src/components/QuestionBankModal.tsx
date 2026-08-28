@@ -1,12 +1,25 @@
 import React, { useState } from 'react';
-import { Question } from '../types';
+import { Question, UserAccount } from '../types';
 import { MathText } from '../utils/mathRenderer';
-import { Database, X, Plus, Edit2, Trash2, Search, Filter, BookOpen } from 'lucide-react';
+import {
+  Database,
+  X,
+  Plus,
+  Edit2,
+  Trash2,
+  Search,
+  Filter,
+  User,
+  Shield,
+  Lock,
+  BookOpen,
+} from 'lucide-react';
 
 interface QuestionBankModalProps {
   isOpen: boolean;
   onClose: () => void;
   bank: Question[];
+  currentUser?: UserAccount | null;
   onAddToDraft: (q: Question) => void;
   onEditInDraft: (q: Question) => void;
   onDelete: (index: number) => void;
@@ -17,6 +30,7 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
   isOpen,
   onClose,
   bank,
+  currentUser = null,
   onAddToDraft,
   onEditInDraft,
   onDelete,
@@ -24,19 +38,31 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
   const [selectedType, setSelectedType] = useState<string>('all');
+  const [authorFilter, setAuthorFilter] = useState<'all' | 'mine'>('all');
 
   if (!isOpen) return null;
+
+  const isSuperAdmin = currentUser?.role === 'super_admin';
 
   const filteredQuestions = bank.map((q, originalIndex) => ({ q, originalIndex })).filter(({ q }) => {
     const matchesSearch =
       (q.content && q.content.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (q.topic && q.topic.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (q.stem && q.stem.toLowerCase().includes(searchTerm.toLowerCase()));
+      (q.stem && q.stem.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (q.authorName && q.authorName.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesGrade = selectedGrade === 'all' || q.grade === selectedGrade;
     const matchesType = selectedType === 'all' || q.type === selectedType;
 
-    return matchesSearch && matchesGrade && matchesType;
+    const isMyQuestion =
+      Boolean(currentUser && (
+        q.authorId === currentUser.id ||
+        (q.authorUsername && q.authorUsername.toLowerCase() === currentUser.username.toLowerCase())
+      ));
+
+    const matchesAuthor = authorFilter === 'all' || isMyQuestion;
+
+    return matchesSearch && matchesGrade && matchesType && matchesAuthor;
   });
 
   const getTypeName = (type: string) => {
@@ -82,42 +108,91 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
         </div>
 
         {/* Filters and search */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-            <input
-              type="text"
-              placeholder="Tìm kiếm nội dung, chủ đề..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-            />
+        <div className="space-y-2.5 pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+            <div className="relative sm:col-span-2">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                placeholder="Tìm kiếm nội dung, chủ đề, tên giáo viên..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-slate-400 shrink-0" />
+              <select
+                value={selectedGrade}
+                onChange={(e) => setSelectedGrade(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="all">Tất cả khối lớp</option>
+                <option value="10">Khối Lớp 10</option>
+                <option value="11">Khối Lớp 11</option>
+                <option value="12">Khối Lớp 12</option>
+              </select>
+            </div>
+            <div>
+              <select
+                value={selectedType}
+                onChange={(e) => setSelectedType(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="all">Tất cả dạng câu hỏi</option>
+                <option value="mc">Trắc nghiệm ABCD</option>
+                <option value="tf">Trắc nghiệm Đúng/Sai</option>
+                <option value="short">Trả lời ngắn</option>
+                <option value="essay">Tự luận</option>
+              </select>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-slate-400 shrink-0" />
-            <select
-              value={selectedGrade}
-              onChange={(e) => setSelectedGrade(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="all">Tất cả khối lớp</option>
-              <option value="10">Khối Lớp 10</option>
-              <option value="11">Khối Lớp 11</option>
-              <option value="12">Khối Lớp 12</option>
-            </select>
-          </div>
-          <div>
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="all">Tất cả dạng câu hỏi</option>
-              <option value="mc">Trắc nghiệm ABCD</option>
-              <option value="tf">Trắc nghiệm Đúng/Sai</option>
-              <option value="short">Trả lời ngắn</option>
-              <option value="essay">Tự luận</option>
-            </select>
+
+          {/* Quick Filter: All questions vs My Questions */}
+          <div className="flex items-center justify-between text-xs pt-0.5">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setAuthorFilter('all')}
+                className={`px-3 py-1 rounded-xl font-bold transition-all text-xs flex items-center gap-1.5 ${
+                  authorFilter === 'all'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                }`}
+              >
+                <span>Tất Cả ({bank.length})</span>
+              </button>
+              {currentUser && (
+                <button
+                  type="button"
+                  onClick={() => setAuthorFilter('mine')}
+                  className={`px-3 py-1 rounded-xl font-bold transition-all text-xs flex items-center gap-1.5 ${
+                    authorFilter === 'mine'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>
+                    Câu hỏi của tôi ({
+                      bank.filter(
+                        (q) =>
+                          q.authorId === currentUser.id ||
+                          (q.authorUsername &&
+                            q.authorUsername.toLowerCase() === currentUser.username.toLowerCase())
+                      ).length
+                    })
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {!isSuperAdmin && (
+              <span className="text-[11px] text-slate-400 italic hidden md:inline flex items-center gap-1">
+                <Lock className="w-3 h-3 text-amber-400 inline" />
+                Bạn chỉ có quyền xóa các câu hỏi do chính mình tạo ra.
+              </span>
+            )}
           </div>
         </div>
 
@@ -129,51 +204,95 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
               <span>Không tìm thấy câu hỏi nào phù hợp với bộ lọc.</span>
             </div>
           ) : (
-            filteredQuestions.map(({ q, originalIndex }) => (
-              <div
-                key={q.id || originalIndex}
-                className="bg-slate-950 p-4 rounded-2xl border border-slate-800/90 hover:border-slate-700/80 transition-all space-y-3"
-              >
-                <div className="flex items-center justify-between border-b border-slate-800/60 pb-2">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="bg-indigo-600/30 text-indigo-300 font-bold text-[10px] px-2.5 py-0.5 rounded-lg uppercase tracking-wider border border-indigo-500/30">
-                      {getTypeName(q.type)}
-                    </span>
-                    <span className="bg-slate-800 text-slate-300 font-semibold text-[10px] px-2 py-0.5 rounded-lg">
-                      Lớp {q.grade}
-                    </span>
-                    <span className="bg-slate-800 text-slate-300 font-semibold text-[10px] px-2 py-0.5 rounded-lg">
-                      {q.level}
-                    </span>
-                    <span className="text-slate-400 text-xs font-semibold ml-1">
-                      • {q.topic}
-                    </span>
-                  </div>
+            filteredQuestions.map(({ q, originalIndex }) => {
+              const isMyQuestion = Boolean(
+                currentUser && (
+                  q.authorId === currentUser.id ||
+                  (q.authorUsername &&
+                    q.authorUsername.toLowerCase() === currentUser.username.toLowerCase())
+                )
+              );
+              const canDelete = isSuperAdmin || isMyQuestion;
 
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => onAddToDraft(q)}
-                      className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-all shadow-sm flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Thêm Vào Đề</span>
-                    </button>
-                    <button
-                      onClick={() => onEditInDraft(q)}
-                      className="bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border border-amber-800/40 text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1"
-                      title="Nạp vào form để sửa"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => onDelete(originalIndex)}
-                      className="bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1"
-                      title="Xóa khỏi ngân hàng"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+              return (
+                <div
+                  key={q.id || originalIndex}
+                  className="bg-slate-950 p-4 rounded-2xl border border-slate-800/90 hover:border-slate-700/80 transition-all space-y-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/60 pb-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="bg-indigo-600/30 text-indigo-300 font-bold text-[10px] px-2.5 py-0.5 rounded-lg uppercase tracking-wider border border-indigo-500/30">
+                        {getTypeName(q.type)}
+                      </span>
+                      <span className="bg-slate-800 text-slate-300 font-semibold text-[10px] px-2 py-0.5 rounded-lg">
+                        Lớp {q.grade}
+                      </span>
+                      <span className="bg-slate-800 text-slate-300 font-semibold text-[10px] px-2 py-0.5 rounded-lg">
+                        {q.level}
+                      </span>
+                      <span className="text-slate-400 text-xs font-semibold ml-1">
+                        • {q.topic}
+                      </span>
+
+                      {/* Author badge */}
+                      {q.authorName ? (
+                        <span
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-lg flex items-center gap-1 border ${
+                            isMyQuestion
+                              ? 'bg-indigo-950/60 text-indigo-300 border-indigo-500/40 font-bold'
+                              : 'bg-slate-900 text-slate-400 border-slate-800'
+                          }`}
+                          title={`Người tạo: ${q.authorName} (${q.authorUsername || 'giáo viên'})`}
+                        >
+                          <User className="w-3 h-3 text-indigo-400" />
+                          <span>{isMyQuestion ? 'Tôi tạo' : q.authorName}</span>
+                        </span>
+                      ) : (
+                        <span
+                          className="text-[10px] font-semibold px-2 py-0.5 rounded-lg flex items-center gap-1 bg-slate-900 text-slate-400 border border-slate-800"
+                          title="Câu hỏi mẫu của hệ thống"
+                        >
+                          <Shield className="w-3 h-3 text-amber-400" />
+                          <span>Hệ Thống</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => onAddToDraft(q)}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-all shadow-sm flex items-center gap-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Thêm Vào Đề</span>
+                      </button>
+                      <button
+                        onClick={() => onEditInDraft(q)}
+                        className="bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border border-amber-800/40 text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1"
+                        title="Nạp vào form để chỉnh sửa sử dụng"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline text-[11px]">Sửa để dùng</span>
+                      </button>
+                      {canDelete ? (
+                        <button
+                          onClick={() => onDelete(originalIndex)}
+                          className="bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1"
+                          title={isSuperAdmin ? 'Xóa khỏi ngân hàng (Quyền Admin)' : 'Xóa câu hỏi của bạn'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <span
+                          className="bg-slate-900/80 border border-slate-800 text-slate-500 text-[10px] font-semibold px-2 py-1.5 rounded-xl flex items-center gap-1 cursor-not-allowed select-none"
+                          title={`Chỉ tác giả (${q.authorName || 'Hệ thống'}) hoặc Quản trị viên tối cao mới có quyền xóa câu hỏi này`}
+                        >
+                          <Lock className="w-3 h-3 text-slate-500" />
+                          <span className="hidden sm:inline">Khóa xóa</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
 
                 {/* 1. Stem */}
                 {q.stem && (
@@ -255,10 +374,11 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
                   </div>
                 )}
               </div>
-            ))
-          )}
-        </div>
+            );
+          })
+        )}
       </div>
+    </div>
     </div>
   );
 };

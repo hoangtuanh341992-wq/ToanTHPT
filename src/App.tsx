@@ -304,15 +304,27 @@ export default function App() {
   };
 
   const handleSaveQuestionToBank = (q: Question) => {
-    setQuestionBank((prev) => [q, ...prev]);
-    saveQuestionToCloud(q);
+    const stampedQ: Question = {
+      ...q,
+      authorId: q.authorId || currentUser?.id || 'admin',
+      authorName: q.authorName || currentUser?.displayName || 'Quản trị viên',
+      authorUsername: q.authorUsername || currentUser?.username || 'admin',
+    };
+    setQuestionBank((prev) => [stampedQ, ...prev]);
+    saveQuestionToCloud(stampedQ);
     showToast('Đã lưu câu hỏi vào Ngân hàng đám mây hệ thống!', 'success');
   };
 
   const handleSaveAllToBank = () => {
     if (draftingQuestions.length === 0) return;
-    setQuestionBank((prev) => [...draftingQuestions, ...prev]);
-    draftingQuestions.forEach((q) => saveQuestionToCloud(q));
+    const stampedQs = draftingQuestions.map((q) => ({
+      ...q,
+      authorId: q.authorId || currentUser?.id || 'admin',
+      authorName: q.authorName || currentUser?.displayName || 'Quản trị viên',
+      authorUsername: q.authorUsername || currentUser?.username || 'admin',
+    }));
+    setQuestionBank((prev) => [...stampedQs, ...prev]);
+    stampedQs.forEach((q) => saveQuestionToCloud(q));
     showToast(`Đã đồng bộ toàn bộ ${draftingQuestions.length} câu hỏi lên Ngân hàng đám mây!`, 'success');
   };
 
@@ -335,6 +347,13 @@ export default function App() {
       return;
     }
 
+    const stampedQs = draftingQuestions.map((q) => ({
+      ...q,
+      authorId: q.authorId || currentUser?.id || 'admin',
+      authorName: q.authorName || currentUser?.displayName || 'Quản trị viên',
+      authorUsername: q.authorUsername || currentUser?.username || 'admin',
+    }));
+
     const newExam: Exam = {
       id: 'exam-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
       title: data.title,
@@ -344,7 +363,10 @@ export default function App() {
       shuffleOpts: data.shuffleOpts,
       description: data.description,
       createdAt: new Date().toLocaleDateString('vi-VN'),
-      questions: [...draftingQuestions],
+      authorId: currentUser?.id || 'admin',
+      authorName: currentUser?.displayName || 'Quản trị viên',
+      authorUsername: currentUser?.username || 'admin',
+      questions: stampedQs,
     };
 
     setExams((prev) => [newExam, ...prev]);
@@ -472,8 +494,16 @@ export default function App() {
           <TabTakeExam
             exams={exams}
             onExamSubmitted={(res) => {
-              setResults((prev) => [res, ...prev]);
-              submitExamResultToCloud(res);
+              const matchedExam = exams.find(
+                (e) => e.code.toUpperCase() === res.examCode.toUpperCase()
+              );
+              const stampedRes: ExamResult = {
+                ...res,
+                examAuthorId: res.examAuthorId || matchedExam?.authorId,
+                examAuthorName: res.examAuthorName || matchedExam?.authorName,
+              };
+              setResults((prev) => [stampedRes, ...prev]);
+              submitExamResultToCloud(stampedRes);
             }}
             showToast={showToast}
             presetExamCode={presetExamCode}
@@ -516,9 +546,26 @@ export default function App() {
         {currentTab === 'results' && (
           <TabResults
             results={results}
+            exams={exams}
+            currentUser={currentUser}
             onClearResults={() => {
-              results.forEach((r) => deleteExamResultFromCloud(r.id));
-              setResults([]);
+              const isSuperAdmin = currentUser?.role === 'super_admin';
+              if (isSuperAdmin) {
+                results.forEach((r) => deleteExamResultFromCloud(r.id));
+                setResults([]);
+              } else if (currentUser) {
+                const myResultIds = new Set<string>(
+                  results
+                    .filter((r) => {
+                      if (r.examAuthorId && r.examAuthorId === currentUser.id) return true;
+                      const matched = exams.find((e) => e.code.toUpperCase() === r.examCode.toUpperCase());
+                      return Boolean(matched && (matched.authorId === currentUser.id || matched.authorUsername === currentUser.username));
+                    })
+                    .map((r) => r.id)
+                );
+                myResultIds.forEach((id: string) => deleteExamResultFromCloud(id));
+                setResults((prev) => prev.filter((r) => !myResultIds.has(r.id)));
+              }
             }}
             onDeleteResult={(id) => {
               setResults((prev) => prev.filter((r) => r.id !== id));
@@ -564,6 +611,7 @@ export default function App() {
         isOpen={isBankOpen}
         onClose={() => setIsBankOpen(false)}
         bank={questionBank}
+        currentUser={currentUser}
         onAddToDraft={(q) => {
           setDraftingQuestions((prev) => [...prev, { ...q, id: 'q-' + Date.now() }]);
           showToast('Đã thêm câu hỏi vào danh sách soạn thảo!', 'success');

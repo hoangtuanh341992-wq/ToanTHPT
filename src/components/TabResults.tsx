@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ExamResult } from '../types';
+import { Exam, ExamResult, UserAccount } from '../types';
 import { exportResultsToExcel } from '../utils/examExporter';
 import {
   FileSpreadsheet,
@@ -10,12 +10,15 @@ import {
   Award,
   TrendingUp,
   AlertTriangle,
-  FileText,
-  IdCard,
+  Shield,
+  UserCheck,
+  Lock,
 } from 'lucide-react';
 
 interface TabResultsProps {
   results: ExamResult[];
+  exams?: Exam[];
+  currentUser?: UserAccount | null;
   onClearResults: () => void;
   onDeleteResult: (id: string) => void;
   showToast: (msg: string, type?: 'info' | 'success' | 'error' | 'warning') => void;
@@ -23,6 +26,8 @@ interface TabResultsProps {
 
 export const TabResults: React.FC<TabResultsProps> = ({
   results,
+  exams = [],
+  currentUser = null,
   onClearResults,
   onDeleteResult,
   showToast,
@@ -32,7 +37,34 @@ export const TabResults: React.FC<TabResultsProps> = ({
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [deletingResultId, setDeletingResultId] = useState<string | null>(null);
 
-  const filteredResults = results.filter((r) => {
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+
+  // Strict RBAC: Teachers only view results for exams they created. Super admin views all.
+  const accessibleResults = results.filter((r) => {
+    if (isSuperAdmin) return true;
+    if (!currentUser) return false;
+
+    // Check direct exam author ID if present
+    if (r.examAuthorId && r.examAuthorId === currentUser.id) return true;
+
+    // Cross-match with exams in system
+    const matchedExam = exams.find(
+      (e) => e.code.toUpperCase() === r.examCode.toUpperCase()
+    );
+    if (matchedExam) {
+      if (matchedExam.authorId === currentUser.id) return true;
+      if (
+        matchedExam.authorUsername &&
+        matchedExam.authorUsername.toLowerCase() === currentUser.username.toLowerCase()
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  });
+
+  const filteredResults = accessibleResults.filter((r) => {
     const term = searchTerm.toLowerCase();
     const matchesSearch =
       r.studentName.toLowerCase().includes(term) ||
@@ -46,29 +78,29 @@ export const TabResults: React.FC<TabResultsProps> = ({
     return matchesSearch && matchesExam;
   });
 
-  const uniqueExamCodes = Array.from(new Set(results.map((r) => r.examCode)));
+  const uniqueExamCodes = Array.from(new Set(accessibleResults.map((r) => r.examCode)));
 
-  // Analytics calculation
-  const totalSubmissions = results.length;
+  // Analytics calculation based ONLY on accessible results
+  const totalSubmissions = accessibleResults.length;
   const avgScore =
     totalSubmissions > 0
       ? Math.round(
-          (results.reduce((sum, r) => sum + (Number(r.score) || 0), 0) / totalSubmissions) * 100
+          (accessibleResults.reduce((sum, r) => sum + (Number(r.score) || 0), 0) / totalSubmissions) * 100
         ) / 100
       : 0;
   const maxScore =
-    totalSubmissions > 0 ? Math.max(...results.map((r) => Number(r.score) || 0)) : 0;
-  const passCount = results.filter((r) => (Number(r.score) || 0) >= 5.0).length;
+    totalSubmissions > 0 ? Math.max(...accessibleResults.map((r) => Number(r.score) || 0)) : 0;
+  const passCount = accessibleResults.filter((r) => (Number(r.score) || 0) >= 5.0).length;
   const passRate =
     totalSubmissions > 0 ? Math.round((passCount / totalSubmissions) * 100) : 0;
 
   const handleExportExcel = () => {
     try {
-      if (results.length === 0) {
+      if (accessibleResults.length === 0) {
         showToast('Không có dữ liệu bài nộp để xuất tệp Excel!', 'error');
         return;
       }
-      exportResultsToExcel(filteredResults.length > 0 ? filteredResults : results);
+      exportResultsToExcel(filteredResults.length > 0 ? filteredResults : accessibleResults);
       showToast('Đã xuất báo cáo Excel (.xlsx) chuẩn số liệu thành công!', 'success');
     } catch (err: any) {
       console.error('Export Excel error:', err);
@@ -77,12 +109,12 @@ export const TabResults: React.FC<TabResultsProps> = ({
   };
 
   const handleExportCSV = () => {
-    if (results.length === 0) {
+    if (accessibleResults.length === 0) {
       showToast('Không có dữ liệu bài nộp để xuất tệp CSV!', 'error');
       return;
     }
 
-    const exportList = filteredResults.length > 0 ? filteredResults : results;
+    const exportList = filteredResults.length > 0 ? filteredResults : accessibleResults;
     let csv = '\uFEFFSTT,Số Báo Danh,Họ Và Tên,Lớp / Trường,Mã Đề,Tên Đề,Điểm Tổng,Phần I,Phần II,Phần III,Thời Gian Nộp,Số Lần Đổi Tab\n';
     exportList.forEach((r, idx) => {
       csv += `${idx + 1},"${r.studentSbd || ''}","${r.studentName}","${r.studentClass}","${r.examCode}","${r.examTitle || ''}",${r.score},${r.scoreBreakdown?.part1Earned || ''},${r.scoreBreakdown?.part2Earned || ''},${r.scoreBreakdown?.part3Earned || ''},"${r.submittedAt}",${r.tabSwitchCount || 0}\n`;
@@ -101,20 +133,37 @@ export const TabResults: React.FC<TabResultsProps> = ({
     <div className="space-y-6">
       {/* Header Banner */}
       <div className="bg-slate-900/80 p-6 rounded-3xl border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xl">
-        <div>
-          <h2 className="text-xl font-black text-white flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
-              <FileSpreadsheet className="w-5 h-5" />
-            </span>
-            <span>Báo Cáo &amp; Phổ Điểm Kết Quả</span>
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Thống kê chi tiết điểm số, số báo danh học sinh, vi phạm rời tab và xuất file Excel chuẩn.
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h2 className="text-xl font-black text-white flex items-center gap-2.5">
+              <span className="p-2 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
+                <FileSpreadsheet className="w-5 h-5" />
+              </span>
+              <span>Báo Cáo &amp; Phổ Điểm Kết Quả</span>
+            </h2>
+
+            {/* Role indicator badge */}
+            {isSuperAdmin ? (
+              <span className="text-[11px] bg-amber-500/20 text-amber-300 font-bold px-2.5 py-1 rounded-xl border border-amber-500/30 flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-amber-400" />
+                <span>Quản Trị Viên: Toàn bộ hệ thống ({results.length} bài)</span>
+              </span>
+            ) : (
+              <span className="text-[11px] bg-indigo-500/20 text-indigo-300 font-bold px-2.5 py-1 rounded-xl border border-indigo-500/30 flex items-center gap-1.5">
+                <UserCheck className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Giáo viên: {currentUser?.displayName || 'Tài khoản'} (Chỉ xem điểm đề của mình)</span>
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-400">
+            {isSuperAdmin
+              ? 'Thống kê kết quả thi toàn diện của mọi đề thi và giáo viên trong trường.'
+              : 'Thống kê chi tiết điểm số, số báo danh học sinh và bài thi thuộc các đề do Thầy/Cô tạo.'}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {results.length > 0 && (
+          {accessibleResults.length > 0 && (
             <button
               onClick={() => setConfirmClearAll(true)}
               className="bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 border border-rose-800/40 text-xs font-bold px-3.5 py-2.5 rounded-xl transition-all flex items-center gap-1.5"
@@ -190,7 +239,7 @@ export const TabResults: React.FC<TabResultsProps> = ({
       )}
 
       {/* Filter and Search */}
-      {results.length > 0 && (
+      {accessibleResults.length > 0 && (
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
@@ -242,8 +291,10 @@ export const TabResults: React.FC<TabResultsProps> = ({
                 <tr>
                   <td colSpan={9} className="p-12 text-center text-slate-500 font-bold">
                     {searchTerm
-                      ? 'Không tìm thấy kết quả phù hợp.'
-                      : 'Chưa có kết quả bài nộp nào trong hệ thống.'}
+                      ? 'Không tìm thấy kết quả phù hợp với từ khóa tìm kiếm.'
+                      : isSuperAdmin
+                      ? 'Chưa có kết quả bài nộp nào trong hệ thống.'
+                      : 'Chưa có học sinh nào nộp bài cho các đề thi do Thầy/Cô tạo.'}
                   </td>
                 </tr>
               ) : (
@@ -318,7 +369,7 @@ export const TabResults: React.FC<TabResultsProps> = ({
             <div>
               <h3 className="text-base font-black text-white">Xóa Toàn Bộ Lịch Sử Thi?</h3>
               <p className="text-xs text-slate-400 mt-1">
-                Toàn bộ {results.length} bài nộp của thí sinh sẽ bị xóa khỏi bộ nhớ. Thao tác này không thể hoàn tác.
+                Toàn bộ {accessibleResults.length} bài nộp của thí sinh sẽ bị xóa khỏi bộ nhớ. Thao tác này không thể hoàn tác.
               </p>
             </div>
             <div className="flex items-center gap-2.5 pt-2">
