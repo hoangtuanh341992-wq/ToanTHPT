@@ -122,13 +122,13 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
       displayName: trimmedName,
       username: trimmedUsername,
       password: trimmedPassword,
-      email: formEmail.trim() || undefined,
+      email: formEmail.trim() || '',
       subject: formSubject.trim() || 'Toán Học',
       school: formSchool.trim() || 'Trường THPT',
       role: formRole,
       isActive: formActive,
       createdAt: editingUserId ? (users.find(u => u.id === editingUserId)?.createdAt || new Date().toISOString().slice(0, 10)) : new Date().toISOString().slice(0, 10),
-      lastLoginAt: editingUserId ? users.find(u => u.id === editingUserId)?.lastLoginAt : undefined,
+      lastLoginAt: editingUserId ? (users.find(u => u.id === editingUserId)?.lastLoginAt || '') : '',
     };
 
     onSaveUser(newUser);

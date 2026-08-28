@@ -262,6 +262,21 @@ export const DEFAULT_ROOT_ADMIN: UserAccount = {
   lastLoginAt: new Date().toISOString(),
 };
 
+// Helper to clean objects for Firestore (remove undefined values)
+function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const cleaned: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        cleaned[key] = sanitizeForFirestore(value);
+      } else {
+        cleaned[key] = value;
+      }
+    }
+  }
+  return cleaned;
+}
+
 export function subscribeUsers(callback: (users: UserAccount[]) => void): () => void {
   const colRef = collection(db, COLLECTIONS.USERS);
   return onSnapshot(
@@ -270,12 +285,11 @@ export function subscribeUsers(callback: (users: UserAccount[]) => void): () => 
       if (snapshot.empty) {
         // Seed default super admin account
         try {
-          await setDoc(doc(db, COLLECTIONS.USERS, DEFAULT_ROOT_ADMIN.id), DEFAULT_ROOT_ADMIN);
+          await setDoc(doc(db, COLLECTIONS.USERS, DEFAULT_ROOT_ADMIN.id), sanitizeForFirestore(DEFAULT_ROOT_ADMIN));
           callback([DEFAULT_ROOT_ADMIN]);
           return;
         } catch (e) {
           console.warn('[Firebase] Seed root admin error:', e);
-          callback([DEFAULT_ROOT_ADMIN]);
           return;
         }
       }
@@ -284,16 +298,18 @@ export function subscribeUsers(callback: (users: UserAccount[]) => void): () => 
       let hasAdmin = false;
       snapshot.forEach((docSnap) => {
         const u = docSnap.data() as UserAccount;
-        list.push(u);
-        if (u.role === 'super_admin' || u.username === 'admin') {
-          hasAdmin = true;
+        if (u && u.id && u.username) {
+          list.push(u);
+          if (u.role === 'super_admin' || u.username === 'admin') {
+            hasAdmin = true;
+          }
         }
       });
 
       // Ensure root admin exists
-      if (!hasAdmin) {
+      if (!hasAdmin && list.length > 0) {
         try {
-          await setDoc(doc(db, COLLECTIONS.USERS, DEFAULT_ROOT_ADMIN.id), DEFAULT_ROOT_ADMIN);
+          await setDoc(doc(db, COLLECTIONS.USERS, DEFAULT_ROOT_ADMIN.id), sanitizeForFirestore(DEFAULT_ROOT_ADMIN));
           list.unshift(DEFAULT_ROOT_ADMIN);
         } catch {}
       }
@@ -302,7 +318,6 @@ export function subscribeUsers(callback: (users: UserAccount[]) => void): () => 
     },
     (error) => {
       console.warn('[Firebase] subscribeUsers error:', error);
-      callback([DEFAULT_ROOT_ADMIN]);
     }
   );
 }
@@ -310,7 +325,8 @@ export function subscribeUsers(callback: (users: UserAccount[]) => void): () => 
 export async function saveUserToCloud(user: UserAccount): Promise<boolean> {
   try {
     const docRef = doc(db, COLLECTIONS.USERS, user.id);
-    await setDoc(docRef, user, { merge: true });
+    const cleaned = sanitizeForFirestore(user);
+    await setDoc(docRef, cleaned, { merge: true });
     return true;
   } catch (error) {
     console.error('[Firebase] saveUserToCloud error:', error);
