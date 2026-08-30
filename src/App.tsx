@@ -37,6 +37,8 @@ import { EditExamModal } from './components/EditExamModal';
 import { QuestionBankModal } from './components/QuestionBankModal';
 import { ToastContainer } from './components/ToastContainer';
 import { generateExamVariants } from './utils/examStructure';
+import { AICloneQuestionModal } from './components/AICloneQuestionModal';
+import { AICloneExamModal } from './components/AICloneExamModal';
 
 export default function App() {
   // Navigation & Role State
@@ -63,6 +65,12 @@ export default function App() {
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [isPublishOpen, setIsPublishOpen] = useState(false);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
+
+  // AI Modal States for Question Bank & Manage Exams
+  const [aiBankQuestion, setAiBankQuestion] = useState<Question | null>(null);
+  const [isAiBankCloneOpen, setIsAiBankCloneOpen] = useState(false);
+  const [aiManageExam, setAiManageExam] = useState<Exam | null>(null);
+  const [isAiManageCloneOpen, setIsAiManageCloneOpen] = useState(false);
 
   // Data States with LocalStorage Cache + Cloud Firestore Sync
   const [questionBank, setQuestionBank] = useState<Question[]>(() => {
@@ -540,6 +548,10 @@ export default function App() {
             onExportSystemData={handleExportSystemData}
             onImportSystemData={handleImportSystemData}
             onGoToCreate={() => setCurrentTab('create')}
+            onOpenAICloneExam={(ex) => {
+              setAiManageExam(ex);
+              setIsAiManageCloneOpen(true);
+            }}
             showToast={showToast}
           />
         )}
@@ -631,6 +643,58 @@ export default function App() {
           setQuestionBank((prev) => prev.filter((_, i) => i !== index));
           showToast('Đã xóa câu hỏi khỏi ngân hàng đám mây', 'info');
         }}
+        onOpenAIClone={(q) => {
+          setAiBankQuestion(q);
+          setIsAiBankCloneOpen(true);
+        }}
+      />
+
+      {/* AI Clone Question for Question Bank Modal */}
+      <AICloneQuestionModal
+        isOpen={isAiBankCloneOpen}
+        onClose={() => {
+          setIsAiBankCloneOpen(false);
+          setAiBankQuestion(null);
+        }}
+        targetQuestion={aiBankQuestion}
+        onAddToDraft={(q) => {
+          setDraftingQuestions((prev) => [...prev, q]);
+        }}
+        onAddAllToDraft={(qs) => {
+          setDraftingQuestions((prev) => [...prev, ...qs]);
+        }}
+        onSaveToBank={handleSaveQuestionToBank}
+        showToast={showToast}
+      />
+
+      {/* AI Clone Exam from Manage Exams Modal */}
+      <AICloneExamModal
+        isOpen={isAiManageCloneOpen}
+        onClose={() => {
+          setIsAiManageCloneOpen(false);
+          setAiManageExam(null);
+        }}
+        exam={aiManageExam}
+        onClonedExamReady={(clonedQuestions, newTitle) => {
+          const newExam: Exam = {
+            id: `exam-ai-${Date.now()}`,
+            code: `AI-${Math.floor(1000 + Math.random() * 9000)}`,
+            title: newTitle,
+            duration: aiManageExam?.duration || 45,
+            shuffleQs: aiManageExam?.shuffleQs ?? true,
+            shuffleOpts: aiManageExam?.shuffleOpts ?? true,
+            createdAt: new Date().toLocaleDateString('vi-VN'),
+            questions: clonedQuestions,
+            description: `Đề thi song song sinh tự động bằng AI từ đề "${aiManageExam?.title || ''}" (Đã đổi toàn bộ số liệu và giữ nguyên ma trận).`,
+            authorId: currentUser?.id,
+            authorName: currentUser?.displayName || currentUser?.username || 'Giáo viên',
+            authorUsername: currentUser?.username,
+          };
+          setExams((prev) => [newExam, ...prev]);
+          saveExamToCloud(newExam);
+          showToast(`Đã tạo và lưu đề thi song song "${newTitle}" thành công!`, 'success');
+        }}
+        showToast={showToast}
       />
 
       {/* Publish Exam Modal */}

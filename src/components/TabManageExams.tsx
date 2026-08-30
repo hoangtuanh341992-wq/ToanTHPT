@@ -23,6 +23,7 @@ import {
   UserCheck,
   User,
   Lock,
+  Sparkles,
 } from 'lucide-react';
 
 interface TabManageExamsProps {
@@ -39,6 +40,7 @@ interface TabManageExamsProps {
   onExportSystemData: () => void;
   onImportSystemData: (file: File) => void;
   onGoToCreate: () => void;
+  onOpenAICloneExam?: (exam: Exam) => void;
   showToast: (msg: string, type?: 'info' | 'success' | 'error' | 'warning') => void;
 }
 
@@ -56,6 +58,7 @@ export const TabManageExams: React.FC<TabManageExamsProps> = ({
   onExportSystemData,
   onImportSystemData,
   onGoToCreate,
+  onOpenAICloneExam,
   showToast,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -387,6 +390,18 @@ export const TabManageExams: React.FC<TabManageExamsProps> = ({
                       <span>In / Tải PDF</span>
                     </button>
                   </div>
+
+                  {/* AI Clone Exam Button */}
+                  {onOpenAICloneExam && (
+                    <button
+                      onClick={() => onOpenAICloneExam(ex)}
+                      className="w-full bg-gradient-to-r from-indigo-950/70 via-purple-950/70 to-indigo-950/70 hover:from-indigo-900/90 hover:to-purple-900/90 text-indigo-300 hover:text-white border border-indigo-500/40 text-[11px] font-bold py-2 px-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                      title="Dùng AI nhân bản đề thi này thành 1 đề song song với 100% số liệu mới"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Tạo Đề Song Song (AI Đổi Số Liệu)</span>
+                    </button>
+                  )}
 
                   <div className="flex items-center gap-2">
                     <button

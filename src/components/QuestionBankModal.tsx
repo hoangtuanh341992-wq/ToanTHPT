@@ -13,6 +13,7 @@ import {
   Shield,
   Lock,
   BookOpen,
+  Sparkles,
 } from 'lucide-react';
 
 interface QuestionBankModalProps {
@@ -24,6 +25,7 @@ interface QuestionBankModalProps {
   onEditInDraft: (q: Question) => void;
   onDelete: (index: number) => void;
   onSaveEntireBankToDraft?: () => void;
+  onOpenAIClone?: (q: Question) => void;
 }
 
 export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
@@ -34,6 +36,7 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
   onAddToDraft,
   onEditInDraft,
   onDelete,
+  onOpenAIClone,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
@@ -258,7 +261,18 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {onOpenAIClone && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenAIClone(q)}
+                          className="bg-purple-950/50 hover:bg-purple-900/70 text-purple-300 border border-purple-800/40 text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1 shadow-sm"
+                          title="Tạo các câu hỏi tương tự với AI (Đổi số liệu, giữ nguyên dạng toán)"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                          <span className="text-[11px]">AI Biến Thể</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => onAddToDraft(q)}
                         className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-all shadow-sm flex items-center gap-1"

@@ -26,7 +26,10 @@ import {
   CheckCircle2,
   ShieldCheck,
   ListOrdered,
+  Wand2,
 } from 'lucide-react';
+import { AICloneQuestionModal } from './AICloneQuestionModal';
+import { AICloneExamModal } from './AICloneExamModal';
 
 interface TabCreateExamProps {
   draftingQuestions: Question[];
@@ -334,6 +337,43 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
     copy.splice(index + 1, 0, duplicated);
     onDraftQuestionsChange(copy);
     showToast('Đã nhân bản câu hỏi!', 'info');
+  };
+
+  // AI Clone States
+  const [aiCloneTargetQuestion, setAiCloneTargetQuestion] = useState<Question | null>(null);
+  const [isAiCloneModalOpen, setIsAiCloneModalOpen] = useState(false);
+  const [aiTargetDraftIndex, setAiTargetDraftIndex] = useState<number | null>(null);
+  const [isAiCloneExamModalOpen, setIsAiCloneExamModalOpen] = useState(false);
+
+  const handleOpenAICloneForDraftItem = (q: Question, idx: number) => {
+    setAiCloneTargetQuestion(q);
+    setAiTargetDraftIndex(idx);
+    setIsAiCloneModalOpen(true);
+  };
+
+  const handleOpenAICloneFromForm = () => {
+    const q = collectFormData();
+    if (!q) return;
+    setAiCloneTargetQuestion(q);
+    setAiTargetDraftIndex(editingDraftIndex >= 0 ? editingDraftIndex : null);
+    setIsAiCloneModalOpen(true);
+  };
+
+  const handleReplaceDraftQuestion = (newQ: Question) => {
+    if (aiTargetDraftIndex !== null && aiTargetDraftIndex >= 0 && aiTargetDraftIndex < draftingQuestions.length) {
+      const updated = [...draftingQuestions];
+      updated[aiTargetDraftIndex] = newQ;
+      onDraftQuestionsChange(updated);
+    }
+  };
+
+  const handleAddAIQuestionsToDraft = (qs: Question[]) => {
+    onDraftQuestionsChange([...draftingQuestions, ...qs]);
+  };
+
+  const handleClonedExamReady = (clonedQuestions: Question[]) => {
+    onDraftQuestionsChange(clonedQuestions);
+    showToast('Đã nạp toàn bộ đề thi song song (số liệu mới) vào bảng soạn thảo!', 'success');
   };
 
   const handleDeleteQuestion = (index: number) => {
@@ -835,7 +875,7 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
             <button
               type="button"
               onClick={handleSaveQuestion}
-              className="flex-1 min-w-[200px] bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3.5 px-6 rounded-2xl text-xs transition-all shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 uppercase tracking-wider"
+              className="flex-1 min-w-[180px] bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3.5 px-5 rounded-2xl text-xs transition-all shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 uppercase tracking-wider"
             >
               <Plus className="w-4 h-4" />
               <span>{editingDraftIndex >= 0 ? 'CẬP NHẬT CÂU HỎI' : 'THÊM CÂU HỎI VÀO ĐỀ'}</span>
@@ -843,8 +883,18 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
 
             <button
               type="button"
+              onClick={handleOpenAICloneFromForm}
+              className="min-w-[170px] bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 hover:text-white border border-purple-500/40 font-black py-3.5 px-5 rounded-2xl text-xs transition-all flex items-center justify-center gap-2 uppercase tracking-wider shadow-sm"
+              title="Dùng AI tạo thêm các câu hỏi tương tự với số liệu mới từ câu hỏi đang nhập"
+            >
+              <Sparkles className="w-4 h-4 text-purple-400" />
+              <span>AI BIẾN THỂ</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleSaveToBankDirectly}
-              className="flex-1 min-w-[220px] bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3.5 px-6 rounded-2xl text-xs transition-all shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 uppercase tracking-wider"
+              className="flex-1 min-w-[200px] bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3.5 px-5 rounded-2xl text-xs transition-all shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 uppercase tracking-wider"
             >
               <BookmarkPlus className="w-4 h-4" />
               <span>LƯU VÀO NGÂN HÀNG HỆ THỐNG</span>
@@ -853,7 +903,7 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
             <button
               type="button"
               onClick={resetForm}
-              className="px-6 py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-2xl text-xs transition-all flex items-center gap-1.5"
+              className="px-5 py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-2xl text-xs transition-all flex items-center gap-1.5"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>HỦY</span>
@@ -931,15 +981,27 @@ b) $2 + 2 = 5$ - Sai`}
           </div>
 
           {draftingQuestions.length > 0 && (
-            <button
-              type="button"
-              onClick={handleAutoSortMOET}
-              className="bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 hover:text-white border border-indigo-500/40 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 shadow-sm"
-              title="Tự động xếp Phần I (Trắc nghiệm ABCD) -> Phần II (Đúng/Sai) -> Phần III (Trả lời ngắn)"
-            >
-              <ListOrdered className="w-4 h-4 text-indigo-400" />
-              <span>Sắp Xếp Chuẩn 3 Phần</span>
-            </button>
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+              <button
+                type="button"
+                onClick={() => setIsAiCloneExamModalOpen(true)}
+                className="bg-gradient-to-r from-purple-600/80 to-indigo-600/80 hover:from-purple-600 hover:to-indigo-600 text-white border border-purple-400/40 px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 shadow-md shadow-indigo-600/20"
+                title="Dùng AI nhân bản toàn bộ đề thi hiện tại sang một đề song song với 100% số liệu mới"
+              >
+                <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+                <span>AI Tạo Đề Song Song</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleAutoSortMOET}
+                className="bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 hover:text-white border border-indigo-500/40 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 shadow-sm"
+                title="Tự động xếp Phần I (Trắc nghiệm ABCD) -> Phần II (Đúng/Sai) -> Phần III (Trả lời ngắn)"
+              >
+                <ListOrdered className="w-4 h-4 text-indigo-400" />
+                <span>Sắp Xếp Chuẩn 3 Phần</span>
+              </button>
+            </div>
           )}
         </div>
 
@@ -1085,7 +1147,16 @@ b) $2 + 2 = 5$ - Sai`}
                         <span className="text-xs text-slate-400 font-semibold">• {q.topic}</span>
                       </div>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAICloneForDraftItem(q, idx)}
+                          className="text-xs font-bold text-indigo-300 hover:text-white px-2.5 py-1 bg-indigo-950/60 hover:bg-indigo-900/80 rounded-xl border border-indigo-800/50 transition-all flex items-center gap-1 shadow-sm"
+                          title="Tạo câu hỏi tương tự với AI (Đổi số liệu, giữ nguyên dạng toán)"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>AI Biến Thể</span>
+                        </button>
                         <button
                           onClick={() => handleMoveQuestion(idx, 'up')}
                           disabled={idx === 0}
@@ -1242,6 +1313,36 @@ b) $2 + 2 = 5$ - Sai`}
           </div>
         )}
       </div>
+
+      {/* AI Question Clone Modal */}
+      <AICloneQuestionModal
+        isOpen={isAiCloneModalOpen}
+        onClose={() => {
+          setIsAiCloneModalOpen(false);
+          setAiCloneTargetQuestion(null);
+          setAiTargetDraftIndex(null);
+        }}
+        targetQuestion={aiCloneTargetQuestion}
+        onAddToDraft={(q) => {
+          onDraftQuestionsChange([...draftingQuestions, q]);
+        }}
+        onAddAllToDraft={handleAddAIQuestionsToDraft}
+        onSaveToBank={onSaveQuestionToBank}
+        onReplaceOriginal={handleReplaceDraftQuestion}
+        showToast={showToast}
+      />
+
+      {/* AI Exam Clone Modal */}
+      <AICloneExamModal
+        isOpen={isAiCloneExamModalOpen}
+        onClose={() => setIsAiCloneExamModalOpen(false)}
+        exam={{
+          title: 'Đề Thi Đang Soạn',
+          questions: draftingQuestions,
+        }}
+        onClonedExamReady={(cloned) => handleClonedExamReady(cloned)}
+        showToast={showToast}
+      />
     </div>
   );
 };

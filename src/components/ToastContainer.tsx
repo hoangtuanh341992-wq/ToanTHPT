@@ -11,7 +11,7 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onDismis
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-20 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none">
+    <div className="fixed top-20 right-5 z-[9999] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none">
       {toasts.map((toast) => {
         let borderClass = 'border-indigo-500/50 bg-slate-900/95 text-indigo-200';
         let Icon = Info;
