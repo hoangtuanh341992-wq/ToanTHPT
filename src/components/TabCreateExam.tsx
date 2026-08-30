@@ -398,88 +398,235 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
       return;
     }
 
-    // Split by Câu \d+:
-    const blocks = rawText.split(/\n(?=Câu\s+\d+[:\.])/i);
+    // Split text into question blocks: Câu 1, Câu 2, Bài 1, Question 1...
+    // Also handle blocks split by 2+ newlines or starting with numbers
+    const cleanRaw = rawText.replace(/\r\n/g, '\n');
+    let rawBlocks = cleanRaw.split(/\n(?=(?:Câu|Bài|Question)\s+\d+[:\.\s])/i);
+
+    // If no "Câu X" prefix found, try splitting by double newlines
+    if (rawBlocks.length <= 1 && cleanRaw.includes('\n\n')) {
+      const altBlocks = cleanRaw.split(/\n\s*\n+/);
+      if (altBlocks.length > 1) {
+        rawBlocks = altBlocks;
+      }
+    }
+
     const parsedList: Question[] = [];
 
-    blocks.forEach((block) => {
-      if (!block.trim()) return;
-      const lines = block
-        .split('\n')
-        .map((l) => l.trim())
-        .filter((l) => l.length > 0);
+    rawBlocks.forEach((block, blockIdx) => {
+      const trimmedBlock = block.trim();
+      if (!trimmedBlock) return;
+
+      const lines = trimmedBlock.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
       if (lines.length === 0) return;
 
-      const firstLine = lines[0];
-      const contentStr = firstLine.replace(/^Câu\s+\d+[:\.]\s*/i, '');
+      // Extract Level & Grade & Topic if annotated in bracket e.g. [Nhận biết] [Lớp 12] [Khảo sát hàm số]
+      let level: 'Nhận biết' | 'Thông hiểu' | 'Vận dụng' | 'Vận dụng cao' = 'Thông hiểu';
+      let grade: '10' | '11' | '12' = '12';
+      let topic = 'Tổng hợp';
 
-      const isTfBlock = lines.some((l) => /^[\(]?[a-d][\)\.]/i.test(l.trim()));
+      if (/\[(?:NB|Nhận\s*biết|Mức\s*1)\]/i.test(trimmedBlock)) level = 'Nhận biết';
+      else if (/\[(?:TH|Thông\s*hiểu|Mức\s*2)\]/i.test(trimmedBlock)) level = 'Thông hiểu';
+      else if (/\[(?:VD|Vận\s*dụng|Mức\s*3)\]/i.test(trimmedBlock)) level = 'Vận dụng';
+      else if (/\[(?:VDC|Vận\s*dụng\s*cao|Mức\s*4)\]/i.test(trimmedBlock)) level = 'Vận dụng cao';
 
-      if (isTfBlock) {
-        // True/False question
-        const statements = { a: '', b: '', c: '', d: '' };
-        const corrects = {
-          a: 'true' as 'true' | 'false',
-          b: 'true' as 'true' | 'false',
-          c: 'true' as 'true' | 'false',
-          d: 'false' as 'true' | 'false',
-        };
+      if (/\[(?:Lớp\s*10|10)\]/i.test(trimmedBlock)) grade = '10';
+      else if (/\[(?:Lớp\s*11|11)\]/i.test(trimmedBlock)) grade = '11';
+      else if (/\[(?:Lớp\s*12|12)\]/i.test(trimmedBlock)) grade = '12';
 
-        lines.slice(1).forEach((l) => {
-          const match = l.trim().match(/^[\(]?([a-d])[\)\.]\s*(.*)/i);
-          if (match) {
-            const key = match[1].toLowerCase() as 'a' | 'b' | 'c' | 'd';
-            let text = match[2].trim();
-            if (/\b(sai|false|s)\b/i.test(text)) {
-              corrects[key] = 'false';
-              text = text.replace(/[-:\*]\s*(sai|false|s)\s*$/i, '').trim();
-            } else if (/\b(đúng|true|đ)\b/i.test(text)) {
-              corrects[key] = 'true';
-              text = text.replace(/[-:\*]\s*(đúng|true|đ)\s*$/i, '').trim();
-            }
-            statements[key] = text;
+      // Check for guide/explanation lines (*Lời giải:, *Hướng dẫn giải:, *HDG:)
+      let guide = '';
+      const filteredLines: string[] = [];
+      let isCapturingGuide = false;
+
+      for (const line of lines) {
+        if (/^\*?(?:Lời\s*giải|Hướng\s*dẫn\s*giải|HDG|HD|Giải\s*chi\s*tiết)\s*[:\.]/i.test(line)) {
+          isCapturingGuide = true;
+          guide = line.replace(/^\*?(?:Lời\s*giải|Hướng\s*dẫn\s*giải|HDG|HD|Giải\s*chi\s*tiết)\s*[:\.]\s*/i, '');
+        } else if (isCapturingGuide) {
+          guide += '\n' + line;
+        } else {
+          filteredLines.push(line);
+        }
+      }
+
+      if (filteredLines.length === 0) return;
+
+      // Extract stem/content from header lines
+      let firstLine = filteredLines[0];
+      firstLine = firstLine
+        .replace(/^(?:Câu|Bài|Question)\s+\d+[:\.\s]*/i, '')
+        .replace(/\[(?:NB|TH|VD|VDC|Nhận\s*biết|Thông\s*hiểu|Vận\s*dụng|Vận\s*dụng\s*cao|Lớp\s*\d+)\]/gi, '')
+        .trim();
+
+      // Detection Logic:
+      // 1. Check for Uppercase Multiple Choice options (A. B. C. D. or A) B) C) D)) -> MUST be capital A-D
+      // Exclude lowercase [a-d] to avoid false positive!
+      const hasMcOptions = filteredLines.some((l) =>
+        /^(?:[A-D][\.\:\)\-]|[\(\[]?[A-D][\)\]])\s+/.test(l) ||
+        /(?:^|\s+)A[\.\)]\s+.*?(?:^|\s+)B[\.\)]\s+/i.test(l)
+      );
+
+      // 2. Check for Lowercase True/False statements (a) b) c) d) or a. b. c. d.) -> lowercase a-d only
+      const hasTfStatements = filteredLines.some((l) =>
+        /^(?:[a-d][\.\:\)\-]|[\(\[][a-d][\)\]])\s+/.test(l)
+      );
+
+      // 3. Check for Short Answer indicators (*Đáp án: 12.5 or explicit Phần III)
+      const hasAnswerLine = filteredLines.find((l) => /^\*?(?:Đáp\s*án|ĐA|Đ\/A|Key|Kết\s*quả|Ans)\s*[:\.]?\s*(.*)/i.test(l));
+
+      if (hasMcOptions) {
+        // === PHẦN I: TRẮC NGHIỆM 4 LỰA CHỌN (MC) ===
+        const options: { A: string; B: string; C: string; D: string } = { A: '', B: '', C: '', D: '' };
+        let correctAnswer: 'A' | 'B' | 'C' | 'D' = 'A';
+        const contentLines: string[] = [firstLine];
+        let foundFirstOption = false;
+
+        for (let i = 1; i < filteredLines.length; i++) {
+          const l = filteredLines[i];
+
+          // Check if line contains single or multiple options
+          const singleOptMatch = l.match(/^(?:([A-D])[\.\:\)\-]|[\(\[]([A-D])[\)\]])\s*(.*)/);
+          const multiOptMatch = l.match(/A[\.\)]\s*(.*?)\s+B[\.\)]\s*(.*?)\s+C[\.\)]\s*(.*?)\s+D[\.\)]\s*(.*)/);
+
+          if (multiOptMatch) {
+            foundFirstOption = true;
+            options.A = multiOptMatch[1].trim();
+            options.B = multiOptMatch[2].trim();
+            options.C = multiOptMatch[3].trim();
+            options.D = multiOptMatch[4].trim();
+          } else if (singleOptMatch) {
+            foundFirstOption = true;
+            const optKey = (singleOptMatch[1] || singleOptMatch[2]).toUpperCase() as 'A' | 'B' | 'C' | 'D';
+            options[optKey] = singleOptMatch[3].trim();
+          } else if (/^\*?(?:Đáp\s*án|ĐA|Đ\/A|Key|Chọn|Ans)\s*[:\.]?\s*([A-D])/i.test(l)) {
+            const m = l.match(/^\*?(?:Đáp\s*án|ĐA|Đ\/A|Key|Chọn|Ans)\s*[:\.]?\s*([A-D])/i);
+            if (m) correctAnswer = m[1].toUpperCase() as 'A' | 'B' | 'C' | 'D';
+          } else if (!foundFirstOption) {
+            // Continuation of question content
+            contentLines.push(l);
+          }
+        }
+
+        // If no explicit answer line was found, check if an option has * mark or (Đúng)
+        Object.keys(options).forEach((k) => {
+          const key = k as 'A' | 'B' | 'C' | 'D';
+          if (options[key].includes('*') || /\(Đúng\)/i.test(options[key])) {
+            correctAnswer = key;
+            options[key] = options[key].replace(/\*|\(Đúng\)/gi, '').trim();
           }
         });
 
         parsedList.push({
-          id: 'q-' + Date.now() + '-' + Math.floor(Math.random() * 10000),
-          type: 'tf',
-          stem: '',
-          content: contentStr,
-          grade: '12',
-          level: 'Thông hiểu',
-          topic: 'Tổng hợp',
-          statements,
-          correctAnswers: corrects,
-        });
-      } else {
-        // Multiple choice question
-        const options = { A: '', B: '', C: '', D: '' };
-        let correctAnswer = 'A';
-
-        lines.slice(1).forEach((l) => {
-          const trimmed = l.trim();
-          const match = trimmed.match(/^[\(]?([A-D])[\)\.\:\-]\s*(.*)/i);
-          if (match) {
-            const key = match[1].toUpperCase() as 'A' | 'B' | 'C' | 'D';
-            options[key] = match[2].trim();
-          }
-          if (/^\*?Đáp\s*án\s*[:\.]?\s*([A-D])/i.test(trimmed)) {
-            const m = trimmed.match(/^\*?Đáp\s*án\s*[:\.]?\s*([A-D])/i);
-            if (m) correctAnswer = m[1].toUpperCase();
-          }
-        });
-
-        parsedList.push({
-          id: 'q-' + Date.now() + '-' + Math.floor(Math.random() * 10000),
+          id: `q-${Date.now()}-${blockIdx}-${Math.floor(Math.random() * 10000)}`,
           type: 'mc',
           stem: '',
-          content: contentStr,
-          grade: '12',
-          level: 'Nhận biết',
-          topic: 'Tổng hợp',
-          options,
+          content: contentLines.join('\n').trim(),
+          grade,
+          level: level === 'Thông hiểu' ? 'Nhận biết' : level,
+          topic,
+          options: {
+            A: options.A || 'Phương án A',
+            B: options.B || 'Phương án B',
+            C: options.C || 'Phương án C',
+            D: options.D || 'Phương án D',
+          },
           correctAnswer,
+          guide: guide || undefined,
+        });
+      } else if (hasTfStatements) {
+        // === PHẦN II: TRẮC NGHIỆM ĐÚNG/SAI (TF) ===
+        const statements: { a: string; b: string; c: string; d: string } = { a: '', b: '', c: '', d: '' };
+        const corrects: { a: 'true' | 'false'; b: 'true' | 'false'; c: 'true' | 'false'; d: 'true' | 'false' } = {
+          a: 'true',
+          b: 'false',
+          c: 'true',
+          d: 'false',
+        };
+        const contentLines: string[] = [firstLine];
+        let foundFirstStmt = false;
+
+        for (let i = 1; i < filteredLines.length; i++) {
+          const l = filteredLines[i];
+          const stmtMatch = l.match(/^(?:([a-d])[\.\:\)\-]|[\(\[]([a-d])[\)\]])\s*(.*)/);
+
+          if (stmtMatch) {
+            foundFirstStmt = true;
+            const stmtKey = (stmtMatch[1] || stmtMatch[2]).toLowerCase() as 'a' | 'b' | 'c' | 'd';
+            let text = stmtMatch[3].trim();
+
+            // Detect correctness marked at the end of the statement line e.g. "- Đúng", "[Đ]", "(Sai)", ": S"
+            if (/[-:\*\[\(]\s*(?:sai|false|s)[\)\]]?\s*$/i.test(text) || /\b(sai|false)\b/i.test(text)) {
+              corrects[stmtKey] = 'false';
+              text = text.replace(/[-:\*\[\(]\s*(?:sai|false|s)[\)\]]?\s*$/i, '').trim();
+            } else if (/[-:\*\[\(]\s*(?:đúng|true|đ)[\)\]]?\s*$/i.test(text) || /\b(đúng|true)\b/i.test(text)) {
+              corrects[stmtKey] = 'true';
+              text = text.replace(/[-:\*\[\(]\s*(?:đúng|true|đ)[\)\]]?\s*$/i, '').trim();
+            }
+
+            statements[stmtKey] = text;
+          } else if (/^\*?(?:Đáp\s*án|ĐA|Key)\s*[:\.]?\s*(.*)/i.test(l)) {
+            // If answer is listed as: * Đáp án: a-Đ, b-S, c-Đ, d-S
+            const ansStr = l.replace(/^\*?(?:Đáp\s*án|ĐA|Key)\s*[:\.]?\s*/i, '');
+            ['a', 'b', 'c', 'd'].forEach((k) => {
+              const kRegex = new RegExp(`${k}\\s*[:\\-=\\)]\\s*(đ|đúng|true|s|sai|false)`, 'i');
+              const km = ansStr.match(kRegex);
+              if (km) {
+                const val = km[1].toLowerCase();
+                corrects[k as 'a' | 'b' | 'c' | 'd'] = val.startsWith('đ') || val.startsWith('t') ? 'true' : 'false';
+              }
+            });
+          } else if (!foundFirstStmt) {
+            contentLines.push(l);
+          }
+        }
+
+        parsedList.push({
+          id: `q-${Date.now()}-${blockIdx}-${Math.floor(Math.random() * 10000)}`,
+          type: 'tf',
+          stem: '',
+          content: contentLines.join('\n').trim(),
+          grade,
+          level: 'Thông hiểu',
+          topic,
+          statements: {
+            a: statements.a || 'Mệnh đề a',
+            b: statements.b || 'Mệnh đề b',
+            c: statements.c || 'Mệnh đề c',
+            d: statements.d || 'Mệnh đề d',
+          },
+          correctAnswers: corrects,
+          guide: guide || undefined,
+        });
+      } else if (hasAnswerLine && !/^[A-D]$/i.test(hasAnswerLine.replace(/^\*?(?:Đáp\s*án|ĐA|Đ\/A|Key|Kết\s*quả|Ans)\s*[:\.]?\s*/i, '').trim())) {
+        // === PHẦN III: TRẢ LỜI NGẮN (SHORT ANSWER) ===
+        const ansVal = hasAnswerLine.replace(/^\*?(?:Đáp\s*án|ĐA|Đ\/A|Key|Kết\s*quả|Ans)\s*[:\.]?\s*/i, '').trim();
+        const contentLines = filteredLines.filter((l) => l !== hasAnswerLine);
+
+        parsedList.push({
+          id: `q-${Date.now()}-${blockIdx}-${Math.floor(Math.random() * 10000)}`,
+          type: 'short',
+          stem: '',
+          content: contentLines.join('\n').replace(/^(?:Câu|Bài|Question)\s+\d+[:\.\s]*/i, '').trim(),
+          grade,
+          level: 'Vận dụng',
+          topic,
+          correctAnswer: ansVal || '0',
+          guide: guide || undefined,
+        });
+      } else {
+        // === MẶC ĐỊNH / TỰ LUẬN HOẶC CÂU HỎI THÔNG THƯỜNG ===
+        const contentLines = filteredLines.join('\n').replace(/^(?:Câu|Bài|Question)\s+\d+[:\.\s]*/i, '').trim();
+        parsedList.push({
+          id: `q-${Date.now()}-${blockIdx}-${Math.floor(Math.random() * 10000)}`,
+          type: guide ? 'essay' : 'short',
+          stem: '',
+          content: contentLines,
+          grade,
+          level: 'Vận dụng',
+          topic,
+          correctAnswer: '',
+          guide: guide || undefined,
         });
       }
     });
@@ -491,7 +638,7 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
 
     onDraftQuestionsChange([...draftingQuestions, ...parsedList]);
     setRawText('');
-    showToast(`Đã phân tích và thêm thành công ${parsedList.length} câu hỏi!`, 'success');
+    showToast(`Đã phân tích và thêm thành công ${parsedList.length} câu hỏi vào đề thi!`, 'success');
   };
 
   const insertSampleRaw = () => {
@@ -917,11 +1064,12 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
         <div className="bg-slate-900/90 rounded-3xl border border-slate-800 p-6 sm:p-7 shadow-xl space-y-4">
           <div className="flex flex-wrap justify-between items-center gap-2">
             <div>
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Dán Văn Bản Đề Thi Đã Định Dạng
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-indigo-400" />
+                <span>Dán Văn Bản Đề Thi Đã Định Dạng</span>
               </label>
-              <p className="text-[11px] text-slate-500">
-                Tự động nhận diện cú pháp: Câu 1, Câu 2..., A. B. C. D. hoặc mệnh đề a) b) c) d)
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Hệ thống tự động phân loại chính xác <strong>Phần I (Trắc nghiệm ABCD)</strong>, <strong>Phần II (Đúng / Sai)</strong>, <strong>Phần III (Trả lời ngắn)</strong> và <strong>Tự luận</strong>.
               </p>
             </div>
             <button
@@ -930,24 +1078,59 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
               className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold bg-indigo-950/40 border border-indigo-500/30 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Mẫu Thử Nghiệm</span>
+              <span>Nạp Mẫu Đề Thử Nghiệm</span>
             </button>
           </div>
 
+          {/* Quick Syntax Legend for Teachers */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80 text-[11px]">
+            <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800">
+              <span className="font-bold text-indigo-400">Phần I (Trắc nghiệm ABCD):</span>
+              <p className="text-slate-400 font-mono text-[10px] mt-1 leading-relaxed">
+                Câu 1: Nội dung...<br />
+                A. Phương án 1<br />
+                B. Phương án 2<br />
+                *Đáp án: A
+              </p>
+            </div>
+            <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800">
+              <span className="font-bold text-emerald-400">Phần II (Đúng/Sai a,b,c,d):</span>
+              <p className="text-slate-400 font-mono text-[10px] mt-1 leading-relaxed">
+                Câu 2: Khẳng định...<br />
+                a) Mệnh đề 1 - Đúng<br />
+                b) Mệnh đề 2 - Sai<br />
+                c) Mệnh đề 3 - Đúng
+              </p>
+            </div>
+            <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800">
+              <span className="font-bold text-amber-400">Phần III (Trả lời ngắn):</span>
+              <p className="text-slate-400 font-mono text-[10px] mt-1 leading-relaxed">
+                Câu 3: Tính giá trị...<br />
+                *Đáp án: 12.5<br />
+                *Lời giải: Bước 1...
+              </p>
+            </div>
+          </div>
+
           <textarea
-            rows={10}
+            rows={11}
             value={rawText}
             onChange={(e) => setRawText(e.target.value)}
-            placeholder={`Câu 1: Mệnh đề nào sau đây đúng?
-A. $1 + 1 = 2$
-B. $2 + 2 = 5$
-C. $3 + 3 = 7$
-D. $4 + 4 = 9$
+            placeholder={`Câu 1: Cho hàm số y = f(x)... Mệnh đề nào dưới đây đúng?
+A. Đồng biến trên (0; 1)
+B. Nghịch biến trên (1; 2)
+C. Cực đại tại x = 1
+D. Cực tiểu tại x = 2
 *Đáp án: A
 
-Câu 2: Các khẳng định sau Đúng hay Sai?
-a) $1 + 1 = 2$ - Đúng
-b) $2 + 2 = 5$ - Sai`}
+Câu 2: Các khẳng định sau đây là Đúng hay Sai?
+a) Hàm số liên tục trên R - Đúng
+b) f'(x) > 0 với mọi x - Sai
+c) Đồ thị có tiệm cận đứng - Đúng
+d) Có đúng 2 điểm cực trị - Sai
+
+Câu 3: Tìm giá trị lớn nhất của hàm số trên đoạn [0; 3].
+*Đáp án: 25`}
             className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xs font-mono text-slate-100 focus:outline-none focus:border-indigo-500 custom-scrollbar leading-relaxed"
           />
 

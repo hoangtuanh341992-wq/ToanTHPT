@@ -29,9 +29,8 @@ function getGeminiClient(): GoogleGenAI {
 // Multi-model fallback list prioritizing high availability, math precision, and speed
 const CANDIDATE_MODELS = [
   'gemini-3.7-flash',
-  'gemini-3.6-flash',
-  'gemini-3.5-flash-lite',
-  'gemini-3.1-pro-preview',
+  'gemini-flash-latest',
+  'gemini-3.1-flash-lite',
 ];
 
 /**
@@ -45,25 +44,38 @@ async function callGeminiWithModelFallback(params: {
   let lastError: any = null;
 
   for (const model of CANDIDATE_MODELS) {
-    try {
-      const response = await ai.models.generateContent({
-        model,
-        contents: params.contents,
-        config: params.config,
-      });
+    // Retry up to 2 attempts per model for transient 503/429 spikes
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: params.contents,
+          config: params.config,
+        });
 
-      if (response.text) {
-        return response.text.trim();
-      }
-    } catch (err: any) {
-      lastError = err;
-      const status = err?.status || err?.error?.code || err?.code;
-      const msg = err?.message || err?.error?.message || '';
-      console.warn(`[Gemini Fallback] Model '${model}' responded with status ${status} (${msg}). Switching to next candidate model...`);
-      
-      // Delay briefly if temporary server overload
-      if (status === 503 || status === 429 || msg.includes('high demand') || msg.includes('UNAVAILABLE')) {
-        await new Promise((resolve) => setTimeout(resolve, 400));
+        if (response.text) {
+          return response.text.trim();
+        }
+      } catch (err: any) {
+        lastError = err;
+        const status = err?.status || err?.error?.code || err?.code;
+        const msg = err?.message || err?.error?.message || '';
+
+        const isTransientOverload =
+          status === 503 ||
+          status === 429 ||
+          msg.includes('high demand') ||
+          msg.includes('UNAVAILABLE') ||
+          msg.includes('Resource has been exhausted');
+
+        if (isTransientOverload && attempt === 1) {
+          console.warn(`[Gemini Retry] Model '${model}' high demand (status ${status}). Waiting 600ms before retry...`);
+          await new Promise((resolve) => setTimeout(resolve, 600));
+          continue;
+        }
+
+        console.warn(`[Gemini Fallback] Model '${model}' failed (status ${status}). Switching to next candidate model...`);
+        break; // break inner loop and try next model
       }
     }
   }
