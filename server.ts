@@ -26,6 +26,51 @@ function getGeminiClient(): GoogleGenAI {
   });
 }
 
+// Multi-model fallback list prioritizing high availability, math precision, and speed
+const CANDIDATE_MODELS = [
+  'gemini-3.7-flash',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-pro-preview',
+];
+
+/**
+ * Call Gemini with multi-model failover & retry for 503 / 429 high demand spikes
+ */
+async function callGeminiWithModelFallback(params: {
+  contents: any;
+  config?: any;
+}): Promise<string> {
+  const ai = getGeminiClient();
+  let lastError: any = null;
+
+  for (const model of CANDIDATE_MODELS) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: params.contents,
+        config: params.config,
+      });
+
+      if (response.text) {
+        return response.text.trim();
+      }
+    } catch (err: any) {
+      lastError = err;
+      const status = err?.status || err?.error?.code || err?.code;
+      const msg = err?.message || err?.error?.message || '';
+      console.warn(`[Gemini Fallback] Model '${model}' responded with status ${status} (${msg}). Switching to next candidate model...`);
+      
+      // Delay briefly if temporary server overload
+      if (status === 503 || status === 429 || msg.includes('high demand') || msg.includes('UNAVAILABLE')) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+    }
+  }
+
+  throw lastError || new Error('Tất cả các mô hình AI hiện đang bận hoặc quá tải.');
+}
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -318,8 +363,7 @@ ${question.guide ? `Lời giải gốc: ${question.guide}` : ''}
 
 Hãy sinh chính xác ${numVariants} câu hỏi biến thể tương tự (khác số liệu) theo đúng cấu trúc trên.`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.7-flash',
+      const responseText = await callGeminiWithModelFallback({
         contents: prompt,
         config: {
           systemInstruction,
@@ -328,7 +372,6 @@ Hãy sinh chính xác ${numVariants} câu hỏi biến thể tương tự (khác
         },
       });
 
-      const responseText = response.text ? response.text.trim() : '';
       if (responseText) {
         const rawVariants = extractJsonFromGemini(responseText);
         if (Array.isArray(rawVariants) && rawVariants.length > 0) {
@@ -351,7 +394,7 @@ Hãy sinh chính xác ${numVariants} câu hỏi biến thể tương tự (khác
         }
       }
     } catch (aiErr: any) {
-      console.warn('Gemini API call failed or key missing, falling back to math variation engine:', aiErr?.message || aiErr);
+      console.warn('Gemini models all temporarily busy or key missing, applying math mutation fallback:', aiErr?.message || aiErr);
     }
 
     // If Gemini didn't produce results, use high quality mathematical mutation engine
@@ -423,8 +466,7 @@ ${JSON.stringify(
   2
 )}`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.7-flash',
+      const responseText = await callGeminiWithModelFallback({
         contents: prompt,
         config: {
           systemInstruction,
@@ -433,7 +475,6 @@ ${JSON.stringify(
         },
       });
 
-      const responseText = response.text ? response.text.trim() : '';
       if (responseText) {
         const clonedList = extractJsonFromGemini(responseText);
         if (Array.isArray(clonedList) && clonedList.length > 0) {
@@ -459,7 +500,7 @@ ${JSON.stringify(
         }
       }
     } catch (aiErr: any) {
-      console.warn('Gemini exam clone failed or key missing, applying math mutation fallback:', aiErr?.message || aiErr);
+      console.warn('Gemini models temporarily busy or key missing, applying exam math mutation fallback:', aiErr?.message || aiErr);
     }
 
     // Fallback if needed
