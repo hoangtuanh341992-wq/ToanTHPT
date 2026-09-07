@@ -102,6 +102,31 @@ export default function App() {
   // Toast notifications
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
+  // Theme State: 'cyan-lime' (default requested) or 'dark' (classic)
+  const [theme, setTheme] = useState<'cyan-lime' | 'dark'>(() => {
+    return getStorageItem<'cyan-lime' | 'dark'>(STORAGE_KEYS.THEME, 'cyan-lime');
+  });
+
+  useEffect(() => {
+    setStorageItem(STORAGE_KEYS.THEME, theme);
+    if (theme === 'cyan-lime') {
+      document.body.classList.add('theme-cyan-lime');
+    } else {
+      document.body.classList.remove('theme-cyan-lime');
+    }
+  }, [theme]);
+
+  const handleToggleTheme = () => {
+    const next = theme === 'cyan-lime' ? 'dark' : 'cyan-lime';
+    setTheme(next);
+    showToast(
+      next === 'cyan-lime'
+        ? 'Đã áp dụng Giao diện: Xanh Chuối - Xanh Lơ (Viền và Chữ xanh đậm)'
+        : 'Đã chuyển về Giao diện Tối Cổ Điển',
+      'info'
+    );
+  };
+
   // Synchronize localStorage reliably as local cache
   useEffect(() => {
     setStorageItem(STORAGE_KEYS.QBANK, questionBank);
@@ -479,7 +504,13 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white">
+    <div
+      className={`min-h-screen flex flex-col transition-colors duration-200 ${
+        theme === 'cyan-lime'
+          ? 'theme-cyan-lime selection:bg-lime-300 selection:text-[#064e3b]'
+          : 'bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white'
+      }`}
+    >
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
 
@@ -495,6 +526,8 @@ export default function App() {
         onOpenTeacherManagement={() => setIsTeacherMgmtOpen(true)}
         onLogout={handleLogout}
         isOnline={isOnline}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
       />
 
       {/* Main Content Area */}

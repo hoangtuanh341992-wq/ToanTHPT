@@ -583,7 +583,7 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
     return (
       <div className="space-y-6">
         {/* Sticky Exam Header */}
-        <div className="sticky top-16 z-30 bg-slate-900/95 border border-slate-800/90 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3">
+        <div className="sticky top-[80px] z-30 bg-slate-900/95 border border-slate-800/90 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="space-y-0.5">
               <div className="flex items-center gap-2">

@@ -12,6 +12,7 @@ import {
   Shield,
   LogOut,
   ChevronDown,
+  Palette,
 } from 'lucide-react';
 import { UserAccount } from '../types';
 
@@ -26,6 +27,8 @@ interface HeaderProps {
   currentUser?: UserAccount | null;
   onOpenTeacherManagement?: () => void;
   onLogout?: () => void;
+  theme?: 'cyan-lime' | 'dark';
+  onToggleTheme?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -39,23 +42,25 @@ export const Header: React.FC<HeaderProps> = ({
   currentUser = null,
   onOpenTeacherManagement,
   onLogout,
+  theme = 'cyan-lime',
+  onToggleTheme,
 }) => {
   const isSuperAdmin = currentUser?.role === 'super_admin';
 
   return (
     <header className="sticky top-0 z-40 bg-slate-900/90 border-b border-slate-800/80 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-[76px] py-3.5 sm:py-4 flex items-center justify-between gap-3">
         {/* Brand Logo */}
         <div
-          className="flex items-center gap-3 cursor-pointer select-none group"
+          className="flex items-center gap-3 cursor-pointer select-none group py-0.5"
           onClick={() => onTabChange('take')}
         >
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-indigo-500/25 group-hover:scale-105 transition-transform">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-indigo-500/25 group-hover:scale-105 transition-transform shrink-0">
             D
           </div>
-          <div>
+          <div className="flex flex-col justify-center">
             <div className="flex items-center gap-2">
-              <h1 className="font-extrabold text-lg bg-gradient-to-r from-indigo-300 via-indigo-100 to-purple-300 bg-clip-text text-transparent tracking-tight">
+              <h1 className="font-extrabold text-lg bg-gradient-to-r from-indigo-300 via-indigo-100 to-purple-300 bg-clip-text text-transparent tracking-tight leading-tight">
                 DORETA&apos;S EXAM
               </h1>
               {!isOnline ? (
@@ -70,7 +75,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               )}
             </div>
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest hidden sm:block">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest hidden sm:block mt-0.5 leading-normal">
               Hệ Thống Quản Lý &amp; Thi Trực Tuyến
             </p>
           </div>
@@ -126,8 +131,24 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </nav>
 
-        {/* Actions (Bank & Role Toggle / User Profile) */}
+        {/* Actions (Theme Option, Bank & Role Toggle / User Profile) */}
         <div className="flex items-center gap-2">
+          {/* Theme Option Trigger */}
+          {onToggleTheme && (
+            <button
+              onClick={onToggleTheme}
+              className="relative bg-lime-300 hover:bg-lime-400 text-[#064e3b] border-2 border-[#14532d] px-2.5 sm:px-3 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+              title={
+                theme === 'cyan-lime'
+                  ? 'Tùy chọn giao diện: Xanh Chuối - Xanh Lơ (Bấm để chuyển sang giao diện Tối)'
+                  : 'Tùy chọn giao diện: Tối Cổ Điển (Bấm để chuyển sang giao diện Xanh Chuối - Xanh Lơ)'
+              }
+            >
+              <Palette className="w-4 h-4 text-[#064e3b]" />
+              <span className="hidden sm:inline">Giao Diện</span>
+            </button>
+          )}
+
           {/* Question Bank Trigger */}
           <button
             onClick={onOpenBank}
