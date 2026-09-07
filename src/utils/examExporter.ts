@@ -24,6 +24,30 @@ function formatMathForHtml(text: string): string {
 }
 
 /**
+ * Render question leading text strictly following MOET & user requirements:
+ * 1. Đoạn dẫn (Dữ kiện) nằm hoàn toàn trong câu hỏi (bắt đầu với "Câu X:")
+ * 2. Trình tự hiển thị: Dữ kiện, Hình (nếu có), Nội dung câu hỏi.
+ */
+function renderQuestionLeadingHtml(
+  q: Question,
+  questionCounter: number,
+  imgClassName: string = 'q-img'
+): string {
+  const hasStem = Boolean(q.stem && q.stem.trim());
+  if (hasStem) {
+    return `
+      <div class="q-stem-lead"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.stem)}</div>
+      ${q.image ? `<img src="${q.image}" class="${imgClassName}" alt="Hình minh họa" />` : ''}
+      <div class="q-content">${formatMathForHtml(q.content)}</div>
+    `;
+  }
+  return `
+    <div class="q-content"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
+    ${q.image ? `<img src="${q.image}" class="${imgClassName}" alt="Hình minh họa" />` : ''}
+  `;
+}
+
+/**
  * EXPORT EXAM TO MICROSOFT WORD (.doc / .docx compatible with MathJax & LaTeX)
  */
 export function exportExamToWord(exam: Exam, options: { includeAnswers?: boolean } = { includeAnswers: true }) {
@@ -132,13 +156,15 @@ export function exportExamToWord(exam: Exam, options: { includeAnswers?: boolean
           margin-bottom: 14px;
           text-align: justify;
         }
-        .q-stem {
-          font-style: italic;
-          color: #333;
+        .q-stem, .q-stem-lead {
           margin-bottom: 4px;
         }
+        .q-content {
+          margin-top: 4px;
+          margin-bottom: 6px;
+        }
         .q-title {
-          font-weight: bold;
+          font-weight: normal;
         }
         .options-table {
           width: 100%;
@@ -224,9 +250,7 @@ export function exportExamToWord(exam: Exam, options: { includeAnswers?: boolean
             questionCounter++;
             return `
             <div class="question-item">
-              ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-              <div class="q-title"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-              ${q.image ? `<img src="${q.image}" class="q-img" alt="Hình minh họa" />` : ''}
+              ${renderQuestionLeadingHtml(q, questionCounter, 'q-img')}
               ${
                 q.options
                   ? `
@@ -262,9 +286,7 @@ export function exportExamToWord(exam: Exam, options: { includeAnswers?: boolean
             questionCounter++;
             return `
             <div class="question-item">
-              ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-              <div class="q-title"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-              ${q.image ? `<img src="${q.image}" class="q-img" alt="Hình minh họa" />` : ''}
+              ${renderQuestionLeadingHtml(q, questionCounter, 'q-img')}
               ${
                 q.statements
                   ? `
@@ -296,9 +318,7 @@ export function exportExamToWord(exam: Exam, options: { includeAnswers?: boolean
             questionCounter++;
             return `
             <div class="question-item">
-              ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-              <div class="q-title"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-              ${q.image ? `<img src="${q.image}" class="q-img" alt="Hình minh họa" />` : ''}
+              ${renderQuestionLeadingHtml(q, questionCounter, 'q-img')}
               <div style="margin-top: 6px; font-style: italic;">
                 <i>Trả lời: ............................................................................................................</i>
               </div>
@@ -321,9 +341,7 @@ export function exportExamToWord(exam: Exam, options: { includeAnswers?: boolean
             questionCounter++;
             return `
             <div class="question-item">
-              ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-              <div class="q-title"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-              ${q.image ? `<img src="${q.image}" class="q-img" alt="Hình minh họa" />` : ''}
+              ${renderQuestionLeadingHtml(q, questionCounter, 'q-img')}
             </div>
           `;
           })
@@ -462,6 +480,13 @@ export function exportExamToPDF(exam: Exam) {
           margin-bottom: 12px;
           page-break-inside: avoid;
         }
+        .q-stem-lead {
+          margin-bottom: 3px;
+        }
+        .q-content {
+          margin-top: 3px;
+          margin-bottom: 4px;
+        }
         .q-stem-box {
           font-style: italic;
           color: #333;
@@ -557,9 +582,7 @@ export function exportExamToPDF(exam: Exam) {
             questionCounter++;
             return `
             <div class="q-container">
-              ${q.stem ? `<div class="q-stem-box"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-              <div><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-              ${q.image ? `<img src="${q.image}" class="q-image" alt="Hình minh họa" />` : ''}
+              ${renderQuestionLeadingHtml(q, questionCounter, 'q-image')}
               ${
                 q.options
                   ? `
@@ -591,9 +614,7 @@ export function exportExamToPDF(exam: Exam) {
             questionCounter++;
             return `
             <div class="q-container">
-              ${q.stem ? `<div class="q-stem-box"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-              <div><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-              ${q.image ? `<img src="${q.image}" class="q-image" alt="Hình minh họa" />` : ''}
+              ${renderQuestionLeadingHtml(q, questionCounter, 'q-image')}
               ${
                 q.statements
                   ? `
@@ -625,9 +646,7 @@ export function exportExamToPDF(exam: Exam) {
             questionCounter++;
             return `
             <div class="q-container">
-              ${q.stem ? `<div class="q-stem-box"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-              <div><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-              ${q.image ? `<img src="${q.image}" class="q-image" alt="Hình minh họa" />` : ''}
+              ${renderQuestionLeadingHtml(q, questionCounter, 'q-image')}
               <div style="margin-top: 4px; font-style: italic; font-size: 11pt;">
                 Trả lời: ............................................................................................
               </div>
@@ -649,9 +668,7 @@ export function exportExamToPDF(exam: Exam) {
             questionCounter++;
             return `
             <div class="q-container">
-              ${q.stem ? `<div class="q-stem-box"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-              <div><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-              ${q.image ? `<img src="${q.image}" class="q-image" alt="Hình minh họa" />` : ''}
+              ${renderQuestionLeadingHtml(q, questionCounter, 'q-image')}
             </div>
           `;
           })
@@ -763,9 +780,7 @@ export function exportMultiVariantExamToWord(
                 questionCounter++;
                 return `
                 <div class="question-item">
-                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-                  <div class="q-title"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-                  ${q.image ? `<img src="${q.image}" class="q-img" alt="Hình minh họa" />` : ''}
+                  ${renderQuestionLeadingHtml(q, questionCounter, 'q-img')}
                   ${
                     q.options
                       ? `
@@ -801,9 +816,7 @@ export function exportMultiVariantExamToWord(
                 questionCounter++;
                 return `
                 <div class="question-item">
-                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-                  <div class="q-title"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-                  ${q.image ? `<img src="${q.image}" class="q-img" alt="Hình minh họa" />` : ''}
+                  ${renderQuestionLeadingHtml(q, questionCounter, 'q-img')}
                   ${
                     q.statements
                       ? `
@@ -835,9 +848,7 @@ export function exportMultiVariantExamToWord(
                 questionCounter++;
                 return `
                 <div class="question-item">
-                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-                  <div class="q-title"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-                  ${q.image ? `<img src="${q.image}" class="q-img" alt="Hình minh họa" />` : ''}
+                  ${renderQuestionLeadingHtml(q, questionCounter, 'q-img')}
                   <div style="margin-top: 6px; font-style: italic;">
                     <i>Trả lời: ............................................................................................................</i>
                   </div>
@@ -860,9 +871,7 @@ export function exportMultiVariantExamToWord(
                 questionCounter++;
                 return `
                 <div class="question-item">
-                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-                  <div class="q-title"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-                  ${q.image ? `<img src="${q.image}" class="q-img" alt="Hình minh họa" />` : ''}
+                  ${renderQuestionLeadingHtml(q, questionCounter, 'q-img')}
                 </div>
               `;
               })
@@ -1010,13 +1019,15 @@ export function exportMultiVariantExamToWord(
           margin-bottom: 14px;
           text-align: justify;
         }
-        .q-stem {
-          font-style: italic;
-          color: #333;
+        .q-stem, .q-stem-lead {
           margin-bottom: 4px;
         }
+        .q-content {
+          margin-top: 4px;
+          margin-bottom: 6px;
+        }
         .q-title {
-          font-weight: bold;
+          font-weight: normal;
         }
         .options-table {
           width: 100%;
@@ -1153,9 +1164,7 @@ export function exportMultiVariantExamToPDF(variants: Exam[]) {
                 questionCounter++;
                 return `
                 <div class="question-box">
-                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-                  <div class="q-content"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-                  ${q.image ? `<img src="${q.image}" class="q-image" alt="Hình minh họa" />` : ''}
+                  ${renderQuestionLeadingHtml(q, questionCounter, 'q-image')}
                   ${
                     q.options
                       ? `
@@ -1187,9 +1196,7 @@ export function exportMultiVariantExamToPDF(variants: Exam[]) {
                 questionCounter++;
                 return `
                 <div class="question-box">
-                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-                  <div class="q-content"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-                  ${q.image ? `<img src="${q.image}" class="q-image" alt="Hình minh họa" />` : ''}
+                  ${renderQuestionLeadingHtml(q, questionCounter, 'q-image')}
                   ${
                     q.statements
                       ? `
@@ -1221,9 +1228,7 @@ export function exportMultiVariantExamToPDF(variants: Exam[]) {
                 questionCounter++;
                 return `
                 <div class="question-box">
-                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-                  <div class="q-content"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-                  ${q.image ? `<img src="${q.image}" class="q-image" alt="Hình minh họa" />` : ''}
+                  ${renderQuestionLeadingHtml(q, questionCounter, 'q-image')}
                   <div style="margin-top: 4px; font-style: italic; font-size: 11pt;">
                     <i>Trả lời: ............................................................................................................</i>
                   </div>
@@ -1246,9 +1251,7 @@ export function exportMultiVariantExamToPDF(variants: Exam[]) {
                 questionCounter++;
                 return `
                 <div class="question-box">
-                  ${q.stem ? `<div class="q-stem"><b>Dữ kiện:</b> ${formatMathForHtml(q.stem)}</div>` : ''}
-                  <div class="q-content"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
-                  ${q.image ? `<img src="${q.image}" class="q-image" alt="Hình minh họa" />` : ''}
+                  ${renderQuestionLeadingHtml(q, questionCounter, 'q-image')}
                 </div>
               `;
               })
@@ -1384,6 +1387,9 @@ export function exportMultiVariantExamToPDF(variants: Exam[]) {
           margin-bottom: 10px;
           text-align: justify;
         }
+        .q-stem-lead {
+          margin-bottom: 2px;
+        }
         .q-stem {
           font-style: italic;
           color: #333;
@@ -1391,6 +1397,8 @@ export function exportMultiVariantExamToPDF(variants: Exam[]) {
         }
         .q-content {
           font-weight: normal;
+          margin-top: 2px;
+          margin-bottom: 3px;
         }
         .mc-options-grid {
           display: grid;
