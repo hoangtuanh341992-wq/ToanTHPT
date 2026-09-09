@@ -11,6 +11,7 @@ import {
   ActiveExamSession,
 } from '../utils/storage';
 import confetti from 'canvas-confetti';
+import { AudioPlayer } from './AudioPlayer';
 import {
   PenTool,
   Clock,
@@ -28,6 +29,7 @@ import {
   AlertCircle,
   ShieldAlert,
   IdCard,
+  Volume2,
 } from 'lucide-react';
 
 interface TabTakeExamProps {
@@ -748,7 +750,15 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
                       </div>
 
                       <span className="text-[11px] font-mono text-slate-400 bg-slate-950 px-2.5 py-0.5 rounded-lg border border-slate-800">
-                        {q.type === 'mc' ? '0.25đ' : q.type === 'tf' ? '1.0đ' : q.type === 'short' ? '0.5đ' : '1.0đ'}
+                        {typeof q.points === 'number' && q.points > 0
+                          ? `${q.points}đ`
+                          : q.type === 'mc'
+                          ? '0.25đ'
+                          : q.type === 'tf'
+                          ? '1.0đ'
+                          : q.type === 'short'
+                          ? '0.5đ'
+                          : '1.0đ'}
                       </span>
                     </div>
 
@@ -768,6 +778,15 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
                           className="max-h-60 rounded-2xl border border-slate-800 object-contain mx-auto"
                         />
                       </div>
+                    )}
+
+                    {/* 2b. Audio Attachment */}
+                    {q.audio && (
+                      <AudioPlayer
+                        src={q.audio}
+                        audioName={q.audioName}
+                        className="my-2"
+                      />
                     )}
 
                     {/* 3. Main Question Content */}

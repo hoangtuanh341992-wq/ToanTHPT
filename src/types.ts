@@ -5,8 +5,11 @@ export type QuestionLevel = 'Nhận biết' | 'Thông hiểu' | 'Vận dụng' |
 export interface Question {
   id: string;
   type: QuestionType;
+  points?: number; // Điểm số tùy chỉnh cho câu hỏi (mặc định: 0.25 cho Phần I, 0.5 cho Phần III)
   stem?: string; // Đoạn văn dẫn / dữ kiện chung
   image?: string | null; // Hình ảnh đính kèm base64 hoặc URL
+  audio?: string | null; // Tệp âm thanh đính kèm base64 hoặc URL
+  audioName?: string | null; // Tên tệp âm thanh (ví dụ: track01.mp3)
   content: string; // Nội dung câu hỏi
   grade: '10' | '11' | '12';
   level: QuestionLevel;

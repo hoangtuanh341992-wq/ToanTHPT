@@ -34,16 +34,22 @@ function renderQuestionLeadingHtml(
   imgClassName: string = 'q-img'
 ): string {
   const hasStem = Boolean(q.stem && q.stem.trim());
+  const audioNotice = q.audioName
+    ? `<div style="font-size:10pt; font-style:italic; color:#0d9488; margin: 4px 0;">[File âm thanh nghe: ${escapeHtml(q.audioName)}]</div>`
+    : '';
+
   if (hasStem) {
     return `
       <div class="q-stem-lead"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.stem)}</div>
       ${q.image ? `<img src="${q.image}" class="${imgClassName}" alt="Hình minh họa" />` : ''}
+      ${audioNotice}
       <div class="q-content">${formatMathForHtml(q.content)}</div>
     `;
   }
   return `
     <div class="q-content"><b>Câu ${questionCounter}:</b> ${formatMathForHtml(q.content)}</div>
     ${q.image ? `<img src="${q.image}" class="${imgClassName}" alt="Hình minh họa" />` : ''}
+    ${audioNotice}
   `;
 }
 

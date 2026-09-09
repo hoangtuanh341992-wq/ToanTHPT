@@ -59,8 +59,9 @@ export function calculateMOETScore(
     let correctCount = 0;
 
     if (q.type === 'mc') {
-      // 1. Trắc nghiệm 4 phương án (ABCD): 0.25 điểm / câu
-      max = 0.25;
+      // 1. Trắc nghiệm 4 phương án (ABCD): mặc định 0.25 điểm / câu, hoặc điểm tùy chỉnh do giáo viên gán
+      const customPoints = typeof q.points === 'number' && q.points > 0 ? q.points : 0.25;
+      max = customPoints;
       if (
         userAns !== undefined &&
         userAns !== null &&
@@ -70,8 +71,8 @@ export function calculateMOETScore(
         const uStr = String(userAns).trim().toUpperCase();
         const cStr = String(q.correctAnswer).trim().toUpperCase();
         if (uStr === cStr) {
-          earned = 0.25;
-          note = 'Đúng đáp án (+0.25đ)';
+          earned = customPoints;
+          note = `Đúng đáp án (+${customPoints}đ)`;
         } else {
           note = `Sai (Chọn: ${uStr}, Đúng: ${cStr})`;
         }
@@ -113,8 +114,9 @@ export function calculateMOETScore(
         note = 'Chưa trả lời (0đ)';
       }
     } else if (q.type === 'short') {
-      // 3. Trả lời ngắn: 0.5 điểm / câu
-      max = 0.5;
+      // 3. Trả lời ngắn: mặc định 0.5 điểm / câu, hoặc điểm tùy chỉnh do giáo viên gán
+      const customPoints = typeof q.points === 'number' && q.points > 0 ? q.points : 0.5;
+      max = customPoints;
       if (
         userAns !== undefined &&
         userAns !== null &&
@@ -130,8 +132,8 @@ export function calculateMOETScore(
         const uStr = normalize(String(userAns));
         const cStr = normalize(String(q.correctAnswer));
         if (uStr === cStr || uStr === String(q.correctAnswer).trim().toLowerCase()) {
-          earned = 0.5;
-          note = 'Đúng kết quả (+0.5đ)';
+          earned = customPoints;
+          note = `Đúng kết quả (+${customPoints}đ)`;
         } else {
           note = `Sai (Điền: "${userAns}", Đúng: "${q.correctAnswer}")`;
         }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Question, UserAccount } from '../types';
 import { MathText } from '../utils/mathRenderer';
+import { AudioPlayer } from './AudioPlayer';
 import {
   Database,
   X,
@@ -14,6 +15,7 @@ import {
   Lock,
   BookOpen,
   Sparkles,
+  Volume2,
 } from 'lucide-react';
 
 interface QuestionBankModalProps {
@@ -324,6 +326,16 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
                       className="max-h-40 max-w-full rounded-xl border border-slate-800 object-contain my-1"
                     />
                   </div>
+                )}
+
+                {/* 2b. Audio */}
+                {q.audio && (
+                  <AudioPlayer
+                    src={q.audio}
+                    audioName={q.audioName}
+                    compact
+                    className="my-1 !bg-slate-900/90"
+                  />
                 )}
 
                 {/* 3. Main Question Content */}

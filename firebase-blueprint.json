@@ -74,6 +74,21 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "username", "role"]
+    },
+    "media_storage": {
+      "title": "MediaStorage",
+      "description": "Audio and media chunk storage to support audio files without exceeding Firestore document limit",
+      "properties": {
+        "id": { "type": "string" },
+        "mediaId": { "type": "string" },
+        "chunkIndex": { "type": "number" },
+        "totalChunks": { "type": "number" },
+        "data": { "type": "string" },
+        "name": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id"]
     }
   }
 }

@@ -27,7 +27,11 @@ import {
   ShieldCheck,
   ListOrdered,
   Wand2,
+  Volume2,
+  Link as LinkIcon,
+  Award,
 } from 'lucide-react';
+import { AudioPlayer } from './AudioPlayer';
 import { AICloneQuestionModal } from './AICloneQuestionModal';
 import { AICloneExamModal } from './AICloneExamModal';
 
@@ -78,6 +82,14 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
   const [fmImage, setFmImage] = useState<string | null>(() => {
     return savedDraftForm?.fmImage || null;
   });
+  const [fmAudio, setFmAudio] = useState<string | null>(() => {
+    return savedDraftForm?.fmAudio || null;
+  });
+  const [fmAudioName, setFmAudioName] = useState<string>(() => {
+    return savedDraftForm?.fmAudioName || '';
+  });
+  const [showAudioUrlInput, setShowAudioUrlInput] = useState<boolean>(false);
+  const [audioUrlInput, setAudioUrlInput] = useState<string>('');
   const [fmContent, setFmContent] = useState<string>(() => {
     return savedDraftForm?.fmContent || '';
   });
@@ -123,6 +135,13 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
     return savedDraftForm?.fmShortAnswer || '';
   });
 
+  // Points (PHẦN I & PHẦN III)
+  const [fmPoints, setFmPoints] = useState<string>(() => {
+    return savedDraftForm?.fmPoints !== undefined && savedDraftForm?.fmPoints !== null
+      ? String(savedDraftForm.fmPoints)
+      : '';
+  });
+
   // Essay guide
   const [fmEssayGuide, setFmEssayGuide] = useState<string>(() => {
     return savedDraftForm?.fmEssayGuide || '';
@@ -134,6 +153,7 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-save form draft so reloading or network cuts never lose work
   useEffect(() => {
@@ -146,12 +166,15 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
         fmTopic,
         fmStem,
         fmImage,
+        fmAudio,
+        fmAudioName,
         fmContent,
         fmMcOptions,
         fmMcCorrect,
         fmTfStatements,
         fmTfCorrects,
         fmShortAnswer,
+        fmPoints,
         fmEssayGuide,
         rawText,
       });
@@ -164,12 +187,15 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
     fmTopic,
     fmStem,
     fmImage,
+    fmAudio,
+    fmAudioName,
     fmContent,
     fmMcOptions,
     fmMcCorrect,
     fmTfStatements,
     fmTfCorrects,
     fmShortAnswer,
+    fmPoints,
     fmEssayGuide,
     rawText,
     editingDraftIndex,
@@ -178,17 +204,21 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
   const resetForm = () => {
     setFmStem('');
     setFmImage(null);
+    setFmAudio(null);
+    setFmAudioName('');
     setFmContent('');
     setFmMcOptions({ A: '', B: '', C: '', D: '' });
     setFmMcCorrect('A');
     setFmTfStatements({ a: '', b: '', c: '', d: '' });
     setFmTfCorrects({ a: 'true', b: 'true', c: 'true', d: 'false' });
     setFmShortAnswer('');
+    setFmPoints('');
     setFmEssayGuide('');
     setRawText('');
     setEditingDraftIndex(-1);
     removeStorageItem(STORAGE_KEYS.DRAFT_FORM);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    if (audioInputRef.current) audioInputRef.current.value = '';
   };
 
   const loadQuestionToForm = (q: Question, index: number) => {
@@ -198,7 +228,10 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
     setFmTopic(q.topic || '');
     setFmStem(q.stem || '');
     setFmImage(q.image || null);
+    setFmAudio(q.audio || null);
+    setFmAudioName(q.audioName || '');
     setFmContent(q.content || '');
+    setFmPoints(q.points !== undefined && q.points !== null ? String(q.points) : '');
 
     if (q.type === 'mc' && q.options) {
       setFmMcOptions({
@@ -250,6 +283,63 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
     reader.readAsDataURL(file);
   };
 
+  const processAudioFile = (file: File) => {
+    if (!file) return;
+
+    // Check if valid audio file or audio extension
+    if (!file.type.startsWith('audio/') && !/\.(mp3|wav|ogg|m4a|aac|wma|flac)$/i.test(file.name)) {
+      showToast('Vui lòng chọn tệp âm thanh hợp lệ (MP3, WAV, M4A, OGG, AAC)!', 'error');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('Kích thước file âm thanh tối đa 10MB. Vui lòng nén hoặc chọn file dung lượng nhỏ hơn!', 'error');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setFmAudio(event.target?.result as string);
+      setFmAudioName(file.name);
+      showToast(`Đã tải file âm thanh "${file.name}" thành công!`, 'success');
+    };
+    reader.onerror = () => {
+      showToast('Không thể đọc tệp âm thanh. Vui lòng thử lại!', 'error');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAudioFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processAudioFile(file);
+    }
+  };
+
+  const handleAttachmentDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    if (file.type.startsWith('image/')) {
+      if (file.size > 3 * 1024 * 1024) {
+        showToast('Kích thước ảnh không được vượt quá 3MB!', 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setFmImage(event.target?.result as string);
+        showToast('Đã tải ảnh đính kèm thành công!', 'success');
+      };
+      reader.readAsDataURL(file);
+    } else if (file.type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|wma|flac)$/i.test(file.name)) {
+      processAudioFile(file);
+    } else {
+      showToast('Vui lòng kéo thả tệp hình ảnh hoặc âm thanh hợp lệ!', 'warning');
+    }
+  };
+
   const collectFormData = (): Question | null => {
     if (!fmContent.trim()) {
       showToast('Vui lòng nhập nội dung câu hỏi!', 'error');
@@ -261,6 +351,8 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
       type: currentFmType,
       stem: fmStem.trim(),
       image: fmImage,
+      audio: fmAudio,
+      audioName: fmAudioName || undefined,
       content: fmContent.trim(),
       grade: fmGrade,
       level: fmLevel,
@@ -287,6 +379,14 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
       newQ.correctAnswer = fmShortAnswer.trim();
     } else if (currentFmType === 'essay') {
       newQ.guide = fmEssayGuide.trim();
+    }
+
+    // Gán điểm số cho Phần I (Trắc nghiệm ABCD) & Phần III (Trả lời ngắn)
+    if (currentFmType === 'mc' || currentFmType === 'short') {
+      const p = parseFloat(fmPoints.trim().replace(',', '.'));
+      if (!isNaN(p) && p > 0) {
+        newQ.points = Math.round(p * 100) / 100;
+      }
     }
 
     return newQ;
@@ -337,6 +437,16 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
     copy.splice(index + 1, 0, duplicated);
     onDraftQuestionsChange(copy);
     showToast('Đã nhân bản câu hỏi!', 'info');
+  };
+
+  const handleUpdateQuestionPoints = (index: number, newPoints: number) => {
+    if (index < 0 || index >= draftingQuestions.length) return;
+    const copy = [...draftingQuestions];
+    copy[index] = {
+      ...copy[index],
+      points: newPoints,
+    };
+    onDraftQuestionsChange(copy);
   };
 
   // AI Clone States
@@ -434,6 +544,16 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
       else if (/\[(?:Lớp\s*11|11)\]/i.test(trimmedBlock)) grade = '11';
       else if (/\[(?:Lớp\s*12|12)\]/i.test(trimmedBlock)) grade = '12';
 
+      // Extract custom points if annotated e.g. [0.5đ], (0.5 điểm), [1đ], (1.0đ), [1.5 điểm]
+      let customPoints: number | undefined = undefined;
+      const pointMatch = trimmedBlock.match(/(?:\[|\()(?:\*?\s*(?:Điểm|Điểm\s*số|Points?)\s*[:\.]?\s*)?(\d+(?:[\.,]\d+)?)\s*(?:đ|điểm|pts?)(?:\]|\))/i);
+      if (pointMatch) {
+        const val = parseFloat(pointMatch[1].replace(',', '.'));
+        if (!isNaN(val) && val > 0) {
+          customPoints = Math.round(val * 100) / 100;
+        }
+      }
+
       // Check for guide/explanation lines (*Lời giải:, *Hướng dẫn giải:, *HDG:)
       let guide = '';
       const filteredLines: string[] = [];
@@ -457,6 +577,7 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
       firstLine = firstLine
         .replace(/^(?:Câu|Bài|Question)\s+\d+[:\.\s]*/i, '')
         .replace(/\[(?:NB|TH|VD|VDC|Nhận\s*biết|Thông\s*hiểu|Vận\s*dụng|Vận\s*dụng\s*cao|Lớp\s*\d+)\]/gi, '')
+        .replace(/(?:\[|\()(?:\*?\s*(?:Điểm|Điểm\s*số|Points?)\s*[:\.]?\s*)?\d+(?:[\.,]\d+)?\s*(?:đ|điểm|pts?)(?:\]|\))/gi, '')
         .trim();
 
       // Detection Logic:
@@ -520,6 +641,7 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
         parsedList.push({
           id: `q-${Date.now()}-${blockIdx}-${Math.floor(Math.random() * 10000)}`,
           type: 'mc',
+          points: customPoints,
           stem: '',
           content: contentLines.join('\n').trim(),
           grade,
@@ -606,6 +728,7 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
         parsedList.push({
           id: `q-${Date.now()}-${blockIdx}-${Math.floor(Math.random() * 10000)}`,
           type: 'short',
+          points: customPoints,
           stem: '',
           content: contentLines.join('\n').replace(/^(?:Câu|Bài|Question)\s+\d+[:\.\s]*/i, '').trim(),
           grade,
@@ -833,13 +956,27 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
               />
             </div>
 
-            {/* 2. Image Attachment */}
+            {/* 2. Image & Audio Attachment */}
             <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
-                2. Hình Ảnh Đính Kèm (Nếu có)
-              </label>
-              <div className="flex flex-wrap items-center gap-3">
-                <label className="cursor-pointer bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  2. HÌNH ẢNH &amp; FILE ÂM THANH ĐÍNH KÈM (NẾU CÓ)
+                </label>
+                <span className="text-[10px] text-slate-500 font-normal hidden sm:inline">
+                  Hỗ trợ tải ảnh minh họa hoặc file nghe âm thanh (MP3, WAV, M4A tối đa 10MB)
+                </span>
+              </div>
+
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onDrop={handleAttachmentDrop}
+                className="flex flex-wrap items-center gap-3 p-3 rounded-2xl bg-slate-950/60 border border-slate-800 hover:border-slate-700 transition-colors"
+              >
+                {/* Image Upload Button */}
+                <label className="cursor-pointer bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-sm">
                   <ImageIcon className="w-4 h-4 text-indigo-400" />
                   <span>Chọn Ảnh Từ Máy</span>
                   <input
@@ -851,8 +988,36 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
                   />
                 </label>
 
+                {/* Audio Upload Button */}
+                <label className="cursor-pointer bg-slate-950 hover:bg-slate-800 text-emerald-400 hover:text-emerald-300 border border-slate-800 hover:border-emerald-500/40 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-sm">
+                  <Volume2 className="w-4 h-4 text-emerald-400" />
+                  <span>Tải File Âm Thanh (Tối đa 10MB)</span>
+                  <input
+                    ref={audioInputRef}
+                    type="file"
+                    accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac"
+                    className="hidden"
+                    onChange={handleAudioFileChange}
+                  />
+                </label>
+
+                {/* Audio URL Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowAudioUrlInput((prev) => !prev)}
+                  className="bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-indigo-300 border border-slate-800 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                >
+                  <LinkIcon className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Dán Link Âm Thanh</span>
+                </button>
+
+                <span className="text-[11px] text-slate-500 italic hidden lg:inline">
+                  (Hỗ trợ file âm thanh đến 10MB hoặc đường dẫn online)
+                </span>
+
+                {/* Image Preview */}
                 {fmImage && (
-                  <div className="flex items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800">
+                  <div className="flex items-center gap-2 bg-slate-900 p-2 rounded-xl border border-slate-800 shadow-sm">
                     <img
                       src={fmImage}
                       alt="Uploaded preview"
@@ -870,7 +1035,64 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
                     </button>
                   </div>
                 )}
+
+                {/* Audio Preview with AudioPlayer */}
+                {fmAudio && (
+                  <AudioPlayer
+                    src={fmAudio}
+                    audioName={fmAudioName}
+                    onDelete={() => {
+                      setFmAudio(null);
+                      setFmAudioName('');
+                      if (audioInputRef.current) audioInputRef.current.value = '';
+                    }}
+                    className="w-full sm:w-auto"
+                  />
+                )}
               </div>
+
+              {/* Online Audio URL Input drawer */}
+              {showAudioUrlInput && (
+                <div className="p-3 bg-slate-950 rounded-2xl border border-indigo-500/30 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <input
+                    type="url"
+                    value={audioUrlInput}
+                    onChange={(e) => setAudioUrlInput(e.target.value)}
+                    placeholder="Dán link âm thanh trực tuyến (VD: https://example.com/audio.mp3)"
+                    className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = audioUrlInput.trim();
+                        if (!trimmed) {
+                          showToast('Vui lòng nhập đường link âm thanh hợp lệ!', 'error');
+                          return;
+                        }
+                        setFmAudio(trimmed);
+                        setFmAudioName(trimmed.split('/').pop()?.split('?')[0] || 'Link trực tuyến');
+                        setShowAudioUrlInput(false);
+                        setAudioUrlInput('');
+                        showToast('Đã gán link file nghe thành công!', 'success');
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all shadow-sm shrink-0"
+                    >
+                      Áp Dụng
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAudioUrlInput(false);
+                        setAudioUrlInput('');
+                      }}
+                      className="text-xs text-slate-400 hover:text-white px-2 py-2"
+                    >
+                      Đóng
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 3. Main Question Content */}
@@ -939,6 +1161,50 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
                     </div>
                   ))}
                 </div>
+
+                {/* Gán điểm số cho câu trắc nghiệm (Phần I) */}
+                <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-900/90 rounded-xl border border-indigo-500/30">
+                  <div className="flex items-center gap-2">
+                    <Award className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div>
+                      <span className="text-xs font-bold text-slate-200">Gán Điểm Số Cho Câu Này:</span>
+                      <span className="text-[11px] text-slate-400 block sm:inline sm:ml-2">
+                        (Mặc định Bộ GD&amp;ĐT: <strong className="text-indigo-400">0.25đ</strong>)
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1">
+                      {[0.25, 0.5, 0.75, 1.0].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setFmPoints(String(preset))}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all border ${
+                            (fmPoints === String(preset) || (!fmPoints && preset === 0.25))
+                              ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm'
+                              : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700'
+                          }`}
+                        >
+                          {preset}đ
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1">
+                      <input
+                        type="number"
+                        step="0.05"
+                        min="0.05"
+                        max="10"
+                        value={fmPoints}
+                        onChange={(e) => setFmPoints(e.target.value)}
+                        placeholder="0.25"
+                        className="w-16 bg-transparent text-xs font-mono font-bold text-amber-300 focus:outline-none text-right"
+                      />
+                      <span className="text-xs font-bold text-slate-400">đ</span>
+                    </div>
+                  </div>
+                </div>
               </>
             )}
 
@@ -987,17 +1253,63 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
             )}
 
             {currentFmType === 'short' && (
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Đáp Án Chuẩn Của Câu Hỏi Trả Lời Ngắn
-                </label>
-                <input
-                  type="text"
-                  value={fmShortAnswer}
-                  onChange={(e) => setFmShortAnswer(e.target.value)}
-                  placeholder="Nhập giá trị hoặc từ khóa đáp án đúng... VD: 20 hoặc 3sqrt(2)"
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
-                />
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    Đáp Án Chuẩn Của Câu Hỏi Trả Lời Ngắn
+                  </label>
+                  <input
+                    type="text"
+                    value={fmShortAnswer}
+                    onChange={(e) => setFmShortAnswer(e.target.value)}
+                    placeholder="Nhập giá trị hoặc từ khóa đáp án đúng... VD: 20 hoặc 3sqrt(2)"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                  />
+                </div>
+
+                {/* Gán điểm số cho câu trả lời ngắn (Phần III) */}
+                <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-900/90 rounded-xl border border-emerald-500/30">
+                  <div className="flex items-center gap-2">
+                    <Award className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div>
+                      <span className="text-xs font-bold text-slate-200">Gán Điểm Số Cho Câu Này:</span>
+                      <span className="text-[11px] text-slate-400 block sm:inline sm:ml-2">
+                        (Mặc định Bộ GD&amp;ĐT: <strong className="text-emerald-400">0.50đ</strong>)
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1">
+                      {[0.5, 0.75, 1.0, 1.5, 2.0].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setFmPoints(String(preset))}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all border ${
+                            (fmPoints === String(preset) || (!fmPoints && preset === 0.5))
+                              ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
+                              : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700'
+                          }`}
+                        >
+                          {preset}đ
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1">
+                      <input
+                        type="number"
+                        step="0.05"
+                        min="0.05"
+                        max="10"
+                        value={fmPoints}
+                        onChange={(e) => setFmPoints(e.target.value)}
+                        placeholder="0.5"
+                        className="w-16 bg-transparent text-xs font-mono font-bold text-amber-300 focus:outline-none text-right"
+                      />
+                      <span className="text-xs font-bold text-slate-400">đ</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1191,36 +1503,73 @@ Câu 3: Tìm giá trị lớn nhất của hàm số trên đoạn [0; 3].
         {/* 3-Part Summary Badges */}
         {draftingQuestions.length > 0 && (() => {
           const { part1, part2, part3, part4 } = getExamParts(draftingQuestions);
+          const part1Points = part1.reduce((sum, q) => sum + (typeof q.points === 'number' && q.points > 0 ? q.points : 0.25), 0);
+          const part2Points = part2.length * 1.0;
+          const part3Points = part3.reduce((sum, q) => sum + (typeof q.points === 'number' && q.points > 0 ? q.points : 0.5), 0);
+          const totalPoints = Math.round((part1Points + part2Points + part3Points + part4.length * 1.0) * 100) / 100;
+
           return (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="bg-slate-900/60 p-3 rounded-2xl border border-slate-800 flex items-center justify-between">
-                <div>
-                  <div className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider">PHẦN I: Trắc nghiệm ABCD</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Xáo câu &amp; xáo phương án (A,B,C,D)</div>
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider">PHẦN I: Trắc nghiệm ABCD</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">Xáo câu &amp; xáo phương án (A,B,C,D)</div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-black font-mono bg-indigo-950 text-indigo-300 border border-indigo-800/60 px-2.5 py-1 rounded-xl inline-block">
+                      {part1.length} câu
+                    </span>
+                    <div className="text-[11px] font-mono font-bold text-amber-400 mt-1">
+                      {Math.round(part1Points * 100) / 100} điểm
+                    </div>
+                  </div>
                 </div>
-                <span className="text-sm font-black font-mono bg-indigo-950 text-indigo-300 border border-indigo-800/60 px-2.5 py-1 rounded-xl">
-                  {part1.length} câu
-                </span>
+
+                <div className="bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">PHẦN II: Đúng / Sai</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">Xáo câu, KHÔNG xáo ý a,b,c,d</div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-black font-mono bg-amber-950 text-amber-300 border border-amber-800/60 px-2.5 py-1 rounded-xl inline-block">
+                      {part2.length} câu
+                    </span>
+                    <div className="text-[11px] font-mono font-bold text-slate-400 mt-1">
+                      Tối đa {part2Points}đ
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">PHẦN III: Trả lời ngắn</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">Xáo trộn thứ tự các câu</div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-black font-mono bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-2.5 py-1 rounded-xl inline-block">
+                      {part3.length} câu
+                    </span>
+                    <div className="text-[11px] font-mono font-bold text-amber-400 mt-1">
+                      {Math.round(part3Points * 100) / 100} điểm
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="bg-slate-900/60 p-3 rounded-2xl border border-slate-800 flex items-center justify-between">
-                <div>
-                  <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">PHẦN II: Đúng / Sai</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Xáo câu, KHÔNG xáo ý a,b,c,d</div>
+              {/* Total Exam Score Strip */}
+              <div className="bg-slate-950/80 px-4 py-2.5 rounded-xl border border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 text-slate-300 font-semibold flex-wrap">
+                  <Award className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Tổng điểm đề thi dự kiến:</span>
+                  <span className="font-mono font-black text-amber-300 text-sm">{totalPoints} điểm</span>
+                  <span className="text-[11px] text-slate-500 font-normal">
+                    (Phần I: {Math.round(part1Points * 100) / 100}đ + Phần II: {part2Points}đ + Phần III: {Math.round(part3Points * 100) / 100}đ)
+                  </span>
                 </div>
-                <span className="text-sm font-black font-mono bg-amber-950 text-amber-300 border border-amber-800/60 px-2.5 py-1 rounded-xl">
-                  {part2.length} câu
-                </span>
-              </div>
-
-              <div className="bg-slate-900/60 p-3 rounded-2xl border border-slate-800 flex items-center justify-between">
-                <div>
-                  <div className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">PHẦN III: Trả lời ngắn</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Xáo trộn thứ tự các câu</div>
+                <div className="text-[11px] text-slate-400 italic">
+                  * Điểm số Phần I và Phần III có thể tùy chỉnh riêng cho từng câu
                 </div>
-                <span className="text-sm font-black font-mono bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-2.5 py-1 rounded-xl">
-                  {part3.length} câu
-                </span>
               </div>
             </div>
           );
@@ -1255,7 +1604,7 @@ Câu 3: Tìm giá trị lớn nhất của hàm số trên đoạn [0; 3].
                         </div>
                       </div>
                       <span className="text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2.5 py-1 rounded-lg self-start sm:self-auto font-mono">
-                        0.25đ / câu
+                        0.25đ / câu (hoặc theo điểm gán)
                       </span>
                     </div>
                   );
@@ -1287,7 +1636,7 @@ Câu 3: Tìm giá trị lớn nhất của hàm số trên đoạn [0; 3].
                         </div>
                       </div>
                       <span className="text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded-lg self-start sm:self-auto font-mono">
-                        0.50đ / câu
+                        0.50đ / câu (hoặc theo điểm gán)
                       </span>
                     </div>
                   );
@@ -1328,6 +1677,35 @@ Câu 3: Tìm giá trị lớn nhất của hàm số trên đoạn [0; 3].
                           {q.level}
                         </span>
                         <span className="text-xs text-slate-400 font-semibold">• {q.topic}</span>
+
+                        {/* Điểm số câu hỏi - Cho phép xem và chỉnh sửa trực tiếp */}
+                        {(q.type === 'mc' || q.type === 'short') && (
+                          <div className="flex items-center gap-1.5 bg-slate-950 border border-amber-500/40 px-2.5 py-0.5 rounded-xl shadow-inner">
+                            <Award className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span className="text-[11px] font-bold text-amber-300/80">Điểm:</span>
+                            <input
+                              type="number"
+                              step="0.05"
+                              min="0.05"
+                              max="10"
+                              value={q.points !== undefined && q.points !== null ? q.points : (q.type === 'mc' ? 0.25 : 0.5)}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value);
+                                if (!isNaN(val) && val > 0) {
+                                  handleUpdateQuestionPoints(idx, Math.round(val * 100) / 100);
+                                }
+                              }}
+                              className="w-14 bg-slate-900 border border-slate-800 focus:border-amber-500 rounded px-1.5 py-0.5 text-center text-xs font-mono font-black text-amber-300 focus:outline-none"
+                              title="Bấm để chỉnh sửa trực tiếp điểm số cho câu này"
+                            />
+                            <span className="text-[11px] font-black text-amber-400">đ</span>
+                          </div>
+                        )}
+                        {q.type === 'tf' && (
+                          <span className="text-[11px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800">
+                            Tối đa 1.0đ
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -1395,6 +1773,15 @@ Câu 3: Tìm giá trị lớn nhất của hàm số trên đoạn [0; 3].
                           className="max-h-48 rounded-xl border border-slate-800 my-1 object-contain"
                         />
                       </div>
+                    )}
+
+                    {q.audio && (
+                      <AudioPlayer
+                        src={q.audio}
+                        audioName={q.audioName}
+                        compact
+                        className="my-1"
+                      />
                     )}
 
                     <div className="text-sm font-semibold text-white leading-relaxed">

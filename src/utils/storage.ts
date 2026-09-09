@@ -34,14 +34,57 @@ export function getStorageItem<T>(key: string, defaultValue: T): T {
 }
 
 /**
+ * Sanitize oversized base64 audio in local cache to prevent QuotaExceededError
+ */
+function sanitizeForLocalCache(val: any): any {
+  if (!val) return val;
+  if (Array.isArray(val)) {
+    return val.map(sanitizeForLocalCache);
+  }
+  if (typeof val === 'object') {
+    const copy: any = { ...val };
+    if (copy.questions && Array.isArray(copy.questions)) {
+      copy.questions = copy.questions.map((q: any) => {
+        if (q && q.audio && typeof q.audio === 'string' && q.audio.startsWith('data:') && q.audio.length > 50000) {
+          return { ...q, audio: `cloud-media://audio_${copy.id || 'exam'}_${q.id || 'q'}` };
+        }
+        return q;
+      });
+    }
+    if (copy.audio && typeof copy.audio === 'string' && copy.audio.startsWith('data:') && copy.audio.length > 50000) {
+      copy.audio = `cloud-media://audio_item_${copy.id || 'item'}`;
+    }
+    return copy;
+  }
+  return val;
+}
+
+/**
  * Safe set to LocalStorage with quota protection & error handling
  */
 export function setStorageItem<T>(key: string, value: T): boolean {
   try {
     const serialized = JSON.stringify(value);
+    // If serialized is larger than 1.5MB, proactively sanitize to prevent quota crash
+    if (serialized.length > 1500000) {
+      const sanitized = sanitizeForLocalCache(value);
+      localStorage.setItem(key, JSON.stringify(sanitized));
+      return true;
+    }
     localStorage.setItem(key, serialized);
     return true;
-  } catch (error) {
+  } catch (error: any) {
+    // If quota exceeded, sanitize large audio strings and retry
+    if (error?.name === 'QuotaExceededError' || error?.code === 22) {
+      try {
+        const sanitized = sanitizeForLocalCache(value);
+        localStorage.setItem(key, JSON.stringify(sanitized));
+        return true;
+      } catch (retryErr) {
+        console.warn(`[Storage] Quota exceeded on key "${key}" even after sanitization.`);
+        return false;
+      }
+    }
     console.error(`[Storage] Failed to write key "${key}":`, error);
     return false;
   }

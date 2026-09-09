@@ -18,6 +18,7 @@ import {
 import firebaseConfigData from '../../firebase-applet-config.json';
 import { Exam, ExamResult, Question, UserAccount } from '../types';
 import { initialExams, initialQuestionBank } from '../data/sampleData';
+import { uploadAudioToCloudChunks, resolveAudioUrl } from '../utils/mediaStorage';
 
 // Initialize Firebase App
 const app = !getApps().length ? initializeApp(firebaseConfigData) : getApp();
@@ -113,7 +114,37 @@ export function subscribeExams(callback: (exams: Exam[]) => void): () => void {
       });
       // Sort newest created first
       list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      
+      // Immediately notify listeners with the current exam documents
       callback(list);
+
+      // In background, resolve any cloud-media references and re-emit when resolved
+      const hasCloudMedia = list.some((e) =>
+        e.questions?.some((q) => q.audio && q.audio.startsWith('cloud-media://'))
+      );
+
+      if (hasCloudMedia) {
+        Promise.all(
+          list.map(async (exam) => {
+            const resolvedQuestions = await Promise.all(
+              (exam.questions || []).map(async (q) => {
+                if (q.audio && q.audio.startsWith('cloud-media://')) {
+                  const resolvedAudio = await resolveAudioUrl(q.audio);
+                  return { ...q, audio: resolvedAudio };
+                }
+                return q;
+              })
+            );
+            return { ...exam, questions: resolvedQuestions };
+          })
+        )
+          .then((resolvedList) => {
+            callback(resolvedList);
+          })
+          .catch((err) => {
+            console.warn('[Firebase] Background exam media resolution warning:', err);
+          });
+      }
     },
     (error) => {
       console.warn('[Firebase] subscribeExams error:', error);
@@ -123,8 +154,30 @@ export function subscribeExams(callback: (exams: Exam[]) => void): () => void {
 
 export async function saveExamToCloud(exam: Exam): Promise<boolean> {
   try {
+    // Process large audio files on questions to avoid 1MB Firestore limit
+    const processedQuestions = await Promise.all(
+      (exam.questions || []).map(async (q) => {
+        if (q.audio && q.audio.startsWith('data:')) {
+          const safeExamId = (exam.id || 'exam').replace(/[^a-zA-Z0-9_-]/g, '_');
+          const safeQId = (q.id || 'q').replace(/[^a-zA-Z0-9_-]/g, '_');
+          const mediaId = `audio_${safeExamId}_${safeQId}`;
+          const cloudRef = await uploadAudioToCloudChunks(mediaId, q.audio, q.audioName);
+          return {
+            ...q,
+            audio: cloudRef,
+          };
+        }
+        return q;
+      })
+    );
+
+    const examToSave: Exam = {
+      ...exam,
+      questions: processedQuestions,
+    };
+
     const docRef = doc(db, COLLECTIONS.EXAMS, exam.id);
-    await setDoc(docRef, exam, { merge: true });
+    await setDoc(docRef, examToSave, { merge: true });
     return true;
   } catch (error) {
     console.error('[Firebase] saveExamToCloud error:', error);
@@ -170,6 +223,26 @@ export function subscribeQuestionBank(callback: (questions: Question[]) => void)
         list.push(docSnap.data() as Question);
       });
       callback(list);
+
+      // In background, resolve any cloud-media references in question bank
+      const hasCloudMedia = list.some((q) => q.audio && q.audio.startsWith('cloud-media://'));
+      if (hasCloudMedia) {
+        Promise.all(
+          list.map(async (q) => {
+            if (q.audio && q.audio.startsWith('cloud-media://')) {
+              const resolvedAudio = await resolveAudioUrl(q.audio);
+              return { ...q, audio: resolvedAudio };
+            }
+            return q;
+          })
+        )
+          .then((resolvedList) => {
+            callback(resolvedList);
+          })
+          .catch((err) => {
+            console.warn('[Firebase] Background question bank media resolution warning:', err);
+          });
+      }
     },
     (error) => {
       console.warn('[Firebase] subscribeQuestionBank error:', error);
@@ -179,8 +252,15 @@ export function subscribeQuestionBank(callback: (questions: Question[]) => void)
 
 export async function saveQuestionToCloud(question: Question): Promise<boolean> {
   try {
-    const docRef = doc(db, COLLECTIONS.QBANK, question.id);
-    await setDoc(docRef, question, { merge: true });
+    let qToSave = question;
+    if (question.audio && question.audio.startsWith('data:')) {
+      const safeQId = (question.id || 'q').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const mediaId = `audio_qbank_${safeQId}`;
+      const cloudRef = await uploadAudioToCloudChunks(mediaId, question.audio, question.audioName);
+      qToSave = { ...question, audio: cloudRef };
+    }
+    const docRef = doc(db, COLLECTIONS.QBANK, qToSave.id);
+    await setDoc(docRef, qToSave, { merge: true });
     return true;
   } catch (error) {
     console.error('[Firebase] saveQuestionToCloud error:', error);

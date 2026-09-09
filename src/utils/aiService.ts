@@ -80,6 +80,7 @@ export function generateLocalMathVariants(
     variants.push({
       id: `ai-clone-${Date.now()}-${i}-${Math.floor(Math.random() * 10000)}`,
       type: baseQ.type || 'mc',
+      points: baseQ.points,
       stem: baseQ.stem ? mutateMathStr(baseQ.stem) : '',
       image: baseQ.image || null,
       content: newContent,
