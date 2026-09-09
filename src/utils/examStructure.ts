@@ -49,7 +49,33 @@ export function shuffleExamQuestions(
   // 1. PHẦN I: Trắc nghiệm ABCD
   let processedPart1 = [...part1];
   if (shuffleQs) {
-    processedPart1.sort(() => Math.random() - 0.5);
+    // Group consecutive questions sharing the same groupStem/groupId so they stay together
+    const chunks: Question[][] = [];
+    let currentChunk: Question[] = [];
+    let currentGroupId: string | null = null;
+
+    for (const q of processedPart1) {
+      const gId = q.groupId || (q.groupStem && q.groupStem.trim() ? q.groupStem.trim() : null);
+      if (gId) {
+        if (currentGroupId === gId) {
+          currentChunk.push(q);
+        } else {
+          if (currentChunk.length > 0) chunks.push(currentChunk);
+          currentChunk = [q];
+          currentGroupId = gId;
+        }
+      } else {
+        if (currentChunk.length > 0) chunks.push(currentChunk);
+        chunks.push([q]);
+        currentChunk = [];
+        currentGroupId = null;
+      }
+    }
+    if (currentChunk.length > 0) chunks.push(currentChunk);
+
+    // Shuffle chunk units
+    chunks.sort(() => Math.random() - 0.5);
+    processedPart1 = chunks.flat();
   }
   processedPart1 = processedPart1.map((q) => {
     if (q.type === 'mc' && q.options) {

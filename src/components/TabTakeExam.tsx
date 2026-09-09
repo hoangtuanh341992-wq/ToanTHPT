@@ -662,6 +662,26 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
               const prevQ = idx > 0 ? activeQuestions[idx - 1] : null;
               const isFirstOfPart = !prevQ || prevQ.type !== q.type;
 
+              // Check if q starts a cluster with groupStem
+              const isClusterStart = Boolean(
+                q.type === 'mc' &&
+                q.groupStem &&
+                q.groupStem.trim() &&
+                (!prevQ || prevQ.type !== 'mc' || prevQ.groupId !== q.groupId || prevQ.groupStem !== q.groupStem)
+              );
+
+              let clusterEndIdx = idx;
+              if (isClusterStart) {
+                while (
+                  clusterEndIdx + 1 < activeQuestions.length &&
+                  activeQuestions[clusterEndIdx + 1].type === 'mc' &&
+                  activeQuestions[clusterEndIdx + 1].groupId === q.groupId &&
+                  activeQuestions[clusterEndIdx + 1].groupStem === q.groupStem
+                ) {
+                  clusterEndIdx++;
+                }
+              }
+
               let partBanner = null;
               if (isFirstOfPart) {
                 if (q.type === 'mc') {
@@ -734,6 +754,26 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
               return (
                 <React.Fragment key={q.id || idx}>
                   {partBanner}
+                  {isClusterStart && (
+                    <div className="bg-gradient-to-r from-indigo-950/80 via-slate-900 to-indigo-950/70 border-2 border-indigo-500/50 rounded-3xl p-5 sm:p-6 shadow-xl space-y-3 my-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-500/30 pb-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <span className="bg-indigo-600 text-white font-black text-xs px-3 py-1 rounded-xl shadow-sm uppercase tracking-wide">
+                            DỮ KIỆN CHUNG CHO CỤM CÂU HỎI
+                          </span>
+                          <span className="text-xs font-bold text-indigo-300">
+                            (Dùng chung cho các câu từ Câu {idx + 1} đến Câu {clusterEndIdx + 1})
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-mono text-indigo-300 bg-indigo-950 px-2.5 py-0.5 rounded-lg border border-indigo-500/30">
+                          {clusterEndIdx - idx + 1} câu liên tiếp
+                        </span>
+                      </div>
+                      <div className="text-sm font-medium text-slate-100 bg-slate-950/70 p-4 rounded-2xl border border-indigo-500/20 leading-relaxed font-sans">
+                        <MathText text={q.groupStem!} />
+                      </div>
+                    </div>
+                  )}
                   <div
                     id={`live_question_${idx}`}
                     className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl space-y-4 relative"
@@ -743,6 +783,11 @@ export const TabTakeExam: React.FC<TabTakeExamProps> = ({
                         <span className="bg-indigo-600 text-white font-black text-xs px-3 py-1 rounded-xl">
                           Câu {idx + 1}
                         </span>
+                        {q.type === 'mc' && q.groupStem && (
+                          <span className="text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-lg">
+                            Thuộc chùm câu có dữ kiện chung
+                          </span>
+                        )}
                         <span className="text-xs font-bold text-slate-400">
                           {q.type === 'mc' ? 'Phần I (ABCD)' : q.type === 'tf' ? 'Phần II (Đ/S)' : q.type === 'short' ? 'Phần III (Ngắn)' : 'Tự luận'}
                         </span>

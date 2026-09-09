@@ -30,6 +30,7 @@ import {
   Volume2,
   Link as LinkIcon,
   Award,
+  BookOpen,
 } from 'lucide-react';
 import { AudioPlayer } from './AudioPlayer';
 import { AICloneQuestionModal } from './AICloneQuestionModal';
@@ -76,6 +77,21 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
   const [fmTopic, setFmTopic] = useState<string>(() => {
     return savedDraftForm?.fmTopic || 'Hàm số & Đồ thị';
   });
+
+  // Dữ kiện chung cho cụm câu hỏi liên tiếp (Phần I - Trắc nghiệm ABCD, tối đa 10 câu)
+  const [fmGroupStem, setFmGroupStem] = useState<string>(() => {
+    return savedDraftForm?.fmGroupStem || '';
+  });
+  const [fmGroupId, setFmGroupId] = useState<string>(() => {
+    return savedDraftForm?.fmGroupId || '';
+  });
+  const [fmGroupQuestionCount, setFmGroupQuestionCount] = useState<number>(() => {
+    return savedDraftForm?.fmGroupQuestionCount || 3;
+  });
+  const [keepClusterStemForNext, setKeepClusterStemForNext] = useState<boolean>(true);
+  const [fmGroupRangeStart, setFmGroupRangeStart] = useState<number>(1);
+  const [fmGroupRangeEnd, setFmGroupRangeEnd] = useState<number>(1);
+
   const [fmStem, setFmStem] = useState<string>(() => {
     return savedDraftForm?.fmStem || '';
   });
@@ -164,6 +180,9 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
         fmGrade,
         fmLevel,
         fmTopic,
+        fmGroupStem,
+        fmGroupId,
+        fmGroupQuestionCount,
         fmStem,
         fmImage,
         fmAudio,
@@ -185,6 +204,9 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
     fmGrade,
     fmLevel,
     fmTopic,
+    fmGroupStem,
+    fmGroupId,
+    fmGroupQuestionCount,
     fmStem,
     fmImage,
     fmAudio,
@@ -201,7 +223,12 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
     editingDraftIndex,
   ]);
 
-  const resetForm = () => {
+  const resetForm = (keepClusterStem: boolean = false) => {
+    if (!keepClusterStem) {
+      setFmGroupStem('');
+      setFmGroupId('');
+      setFmGroupQuestionCount(3);
+    }
     setFmStem('');
     setFmImage(null);
     setFmAudio(null);
@@ -226,6 +253,13 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
     setFmGrade(q.grade);
     setFmLevel(q.level);
     setFmTopic(q.topic || '');
+    if (q.type === 'mc') {
+      setFmGroupStem(q.groupStem || '');
+      setFmGroupId(q.groupId || '');
+    } else {
+      setFmGroupStem('');
+      setFmGroupId('');
+    }
     setFmStem(q.stem || '');
     setFmImage(q.image || null);
     setFmAudio(q.audio || null);
@@ -346,9 +380,17 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
       return null;
     }
 
+    const hasGroupStem = currentFmType === 'mc' && Boolean(fmGroupStem.trim());
+    const assignedGroupId = hasGroupStem ? (fmGroupId.trim() || `grp-${Date.now()}`) : undefined;
+    if (hasGroupStem && !fmGroupId) {
+      setFmGroupId(assignedGroupId!);
+    }
+
     const newQ: Question = {
-      id: 'q-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      id: editingDraftIndex >= 0 ? draftingQuestions[editingDraftIndex].id : ('q-' + Date.now() + '-' + Math.floor(Math.random() * 1000)),
       type: currentFmType,
+      groupStem: hasGroupStem ? fmGroupStem.trim() : undefined,
+      groupId: assignedGroupId,
       stem: fmStem.trim(),
       image: fmImage,
       audio: fmAudio,
@@ -406,7 +448,76 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
       showToast('Đã thêm câu hỏi vào đề thi!', 'success');
     }
 
-    resetForm();
+    if (q.type === 'mc' && q.groupStem && keepClusterStemForNext) {
+      resetForm(true);
+      showToast('Dữ kiện chung cụm vẫn được giữ cho câu tiếp theo!', 'info');
+    } else {
+      resetForm(false);
+    }
+  };
+
+  // Áp dụng dữ kiện chung cho một dải câu hỏi liên tiếp trong danh sách đang soạn (Phần I, tối đa 10 câu)
+  const handleApplyGroupStemToRange = (startNum: number, endNum: number) => {
+    if (!fmGroupStem.trim()) {
+      showToast('Vui lòng nhập nội dung dữ kiện chung trước khi gán cho cụm câu hỏi!', 'error');
+      return;
+    }
+    const startIdx = startNum - 1;
+    const endIdx = endNum - 1;
+    if (startIdx < 0 || endIdx >= draftingQuestions.length || startIdx > endIdx) {
+      showToast('Phạm vi câu hỏi không hợp lệ!', 'error');
+      return;
+    }
+    const count = endIdx - startIdx + 1;
+    if (count > 10) {
+      showToast('Số lượng câu hỏi trong một cụm tối đa là 10 câu liên tiếp!', 'error');
+      return;
+    }
+    for (let i = startIdx; i <= endIdx; i++) {
+      if (draftingQuestions[i].type !== 'mc') {
+        showToast(`Câu ${i + 1} không phải là Trắc nghiệm ABCD (Phần I). Cụm dữ kiện chỉ áp dụng cho Phần I!`, 'error');
+        return;
+      }
+    }
+    const gid = fmGroupId.trim() || `grp-${Date.now()}`;
+    setFmGroupId(gid);
+
+    const updated = [...draftingQuestions];
+    for (let i = startIdx; i <= endIdx; i++) {
+      updated[i] = {
+        ...updated[i],
+        groupStem: fmGroupStem.trim(),
+        groupId: gid,
+      };
+    }
+    onDraftQuestionsChange(updated);
+    showToast(`Đã gán dữ kiện chung cho cụm gồm ${count} câu hỏi (từ Câu ${startNum} đến Câu ${endNum})!`, 'success');
+  };
+
+  const handleRemoveClusterGroup = (groupIdOrStem: string) => {
+    const updated = draftingQuestions.map((q) => {
+      if (q.groupId === groupIdOrStem || q.groupStem === groupIdOrStem) {
+        const copy = { ...q };
+        delete copy.groupStem;
+        delete copy.groupId;
+        return copy;
+      }
+      return q;
+    });
+    onDraftQuestionsChange(updated);
+    showToast('Đã tách cụm câu hỏi thành các câu độc lập!', 'info');
+  };
+
+  const handleEditClusterStem = (groupStem: string, groupId?: string) => {
+    setFmGroupStem(groupStem);
+    if (groupId) setFmGroupId(groupId);
+    setCurrentFmType('mc');
+    setCreateMode('form');
+    setTimeout(() => {
+      const el = document.getElementById('cluster-stem-input-box');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+    showToast('Đã tải dữ kiện chung của cụm lên biểu mẫu soạn thảo!', 'info');
   };
 
   const handleSaveToBankDirectly = () => {
@@ -941,6 +1052,162 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
 
           {/* Stem, Image, and Main Content - STRICT ORDER: 1. STEM -> 2. IMAGE -> 3. CONTENT */}
           <div className="space-y-4">
+            {/* HỘP DỮ KIỆN CHUNG CHO CỤM CÂU HỎI LIÊN TIẾP (TỐI ĐA 10 CÂU) - DÀNH CHO PHẦN I TRẮC NGHIỆM ABCD */}
+            {currentFmType === 'mc' && (
+              <div
+                id="cluster-stem-input-box"
+                className="bg-indigo-950/30 border-2 border-indigo-500/40 hover:border-indigo-500/60 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3 transition-all"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-500/20 pb-2.5">
+                  <div className="flex items-start sm:items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 flex items-center justify-center font-bold shrink-0 mt-0.5 sm:mt-0">
+                      <BookOpen className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-black text-indigo-200 tracking-wide uppercase">
+                          DỮ KIỆN CHUNG CHO CỤM CÂU HỎI LIÊN TIẾP (TỐI ĐA 10 CÂU)
+                        </span>
+                        <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2 py-0.5 rounded-full border border-indigo-500/30">
+                          Phần I
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5 leading-normal">
+                        Nhập nội dung dữ kiện chung (văn bản bài đọc, ngữ cảnh, số liệu thực nghiệm...) cho một cụm câu hỏi liên tiếp nhau. Dữ kiện này sẽ xuất hiện đầu tiên, phía dưới là chùm câu hỏi liên quan. Nếu để trống, hệ thống hiểu câu hỏi là độc lập không chung dữ kiện.
+                      </p>
+                    </div>
+                  </div>
+
+                  {fmGroupStem.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFmGroupStem('');
+                        setFmGroupId('');
+                        showToast('Đã xóa dữ kiện cụm (câu hỏi sẽ độc lập)', 'info');
+                      }}
+                      className="text-xs text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/50 px-2.5 py-1 rounded-lg border border-rose-500/30 flex items-center gap-1 transition-colors self-start sm:self-auto"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Xóa dữ kiện cụm</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <textarea
+                    rows={3}
+                    value={fmGroupStem}
+                    onChange={(e) => setFmGroupStem(e.target.value)}
+                    placeholder="Ví dụ: Đọc đoạn thông tin sau và trả lời các câu hỏi từ 1 đến 4: (hoặc Cho đồ thị chuyển động / bảng số liệu thực nghiệm sau...)"
+                    className="w-full bg-slate-950 border border-indigo-500/30 focus:border-indigo-400 rounded-xl p-3 text-xs text-slate-100 focus:outline-none font-mono transition-colors"
+                  />
+                  {fmGroupStem.includes('$') && (
+                    <div className="bg-slate-950 p-2.5 rounded-xl border border-indigo-500/30 text-xs text-indigo-200">
+                      <div className="text-[10px] text-indigo-400 font-bold uppercase mb-1">Xem trước công thức toán học:</div>
+                      <MathText text={fmGroupStem} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Tùy chỉnh cụm câu hỏi khi có nội dung dữ kiện */}
+                {fmGroupStem.trim() && (
+                  <div className="bg-slate-900/90 border border-indigo-500/30 rounded-xl p-3 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-indigo-300">Số câu trong cụm này:</span>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                            <button
+                              key={num}
+                              type="button"
+                              onClick={() => setFmGroupQuestionCount(num)}
+                              className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all ${
+                                fmGroupQuestionCount === num
+                                  ? 'bg-indigo-600 text-white shadow'
+                                  : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+                              }`}
+                            >
+                              {num}
+                            </button>
+                          ))}
+                          <span className="text-[11px] text-slate-400 ml-1">câu</span>
+                        </div>
+                      </div>
+
+                      <label className="flex items-center gap-1.5 text-slate-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={keepClusterStemForNext}
+                          onChange={(e) => setKeepClusterStemForNext(e.target.checked)}
+                          className="rounded border-slate-700 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-[11px]">Giữ dữ kiện cụm này khi thêm câu tiếp theo</span>
+                      </label>
+                    </div>
+
+                    {/* Gán nhanh cho dải câu hỏi trong đề (nếu đã có câu hỏi Phần I) */}
+                    {draftingQuestions.filter((q) => q.type === 'mc').length >= 2 && (
+                      <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-slate-400 font-medium">Áp dụng cho dải câu trong đề:</span>
+                          <span className="text-slate-400">Từ câu</span>
+                          <select
+                            value={fmGroupRangeStart}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setFmGroupRangeStart(val);
+                              if (fmGroupRangeEnd < val) setFmGroupRangeEnd(val);
+                              if (fmGroupRangeEnd - val + 1 > 10) setFmGroupRangeEnd(val + 9);
+                            }}
+                            className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
+                          >
+                            {draftingQuestions.map((q, qIdx) =>
+                              q.type === 'mc' ? (
+                                <option key={qIdx} value={qIdx + 1}>
+                                  Câu {qIdx + 1}
+                                </option>
+                              ) : null
+                            )}
+                          </select>
+                          <span className="text-slate-400">đến câu</span>
+                          <select
+                            value={fmGroupRangeEnd}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setFmGroupRangeEnd(val);
+                              if (val < fmGroupRangeStart) setFmGroupRangeStart(val);
+                              if (val - fmGroupRangeStart + 1 > 10) setFmGroupRangeStart(val - 9);
+                            }}
+                            className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
+                          >
+                            {draftingQuestions.map((q, qIdx) =>
+                              q.type === 'mc' ? (
+                                <option key={qIdx} value={qIdx + 1}>
+                                  Câu {qIdx + 1}
+                                </option>
+                              ) : null
+                            )}
+                          </select>
+                          <span className="text-[11px] text-indigo-400">
+                            ({Math.max(1, fmGroupRangeEnd - fmGroupRangeStart + 1)} câu liên tiếp, tối đa 10)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyGroupStemToRange(fmGroupRangeStart, fmGroupRangeEnd)}
+                          className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-3 py-1 rounded-lg transition-colors flex items-center gap-1 shadow"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Gán Cho Cụm Này</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* 1. Stem */}
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
@@ -1590,6 +1857,26 @@ Câu 3: Tìm giá trị lớn nhất của hàm số trên đoạn [0; 3].
               const prevQ = idx > 0 ? draftingQuestions[idx - 1] : null;
               const isFirstOfPart = !prevQ || prevQ.type !== q.type;
 
+              // Check if q starts a cluster with groupStem in Part I
+              const isClusterStart = Boolean(
+                q.type === 'mc' &&
+                q.groupStem &&
+                q.groupStem.trim() &&
+                (!prevQ || prevQ.type !== 'mc' || prevQ.groupId !== q.groupId || prevQ.groupStem !== q.groupStem)
+              );
+
+              let clusterEndIdx = idx;
+              if (isClusterStart) {
+                while (
+                  clusterEndIdx + 1 < draftingQuestions.length &&
+                  draftingQuestions[clusterEndIdx + 1].type === 'mc' &&
+                  draftingQuestions[clusterEndIdx + 1].groupId === q.groupId &&
+                  draftingQuestions[clusterEndIdx + 1].groupStem === q.groupStem
+                ) {
+                  clusterEndIdx++;
+                }
+              }
+
               let partHeader = null;
               if (isFirstOfPart) {
                 if (q.type === 'mc') {
@@ -1662,6 +1949,46 @@ Câu 3: Tìm giá trị lớn nhất của hàm số trên đoạn [0; 3].
               return (
                 <React.Fragment key={q.id || idx}>
                   {partHeader}
+                  {isClusterStart && (
+                    <div className="bg-indigo-950/60 border-2 border-indigo-500/40 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-500/20 pb-2.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="bg-indigo-600 text-white font-black text-xs px-3 py-1 rounded-xl shadow-sm uppercase tracking-wide">
+                            DỮ KIỆN CHUNG CHO CỤM CÂU HỎI
+                          </span>
+                          <span className="text-xs font-bold text-indigo-300">
+                            (Dùng chung cho các câu từ Câu {idx + 1} đến Câu {clusterEndIdx + 1})
+                          </span>
+                          <span className="text-[11px] font-mono text-indigo-300 bg-indigo-950 px-2 py-0.5 rounded-lg border border-indigo-500/30">
+                            {clusterEndIdx - idx + 1} câu liên tiếp
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleEditClusterStem(q.groupStem!, q.groupId)}
+                            className="text-xs font-bold text-indigo-200 hover:text-white bg-indigo-900/60 hover:bg-indigo-800 px-2.5 py-1 rounded-lg border border-indigo-500/40 transition-colors flex items-center gap-1 shadow-sm"
+                            title="Tải dữ kiện này lên form soạn thảo để chỉnh sửa"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Sửa Dữ Kiện</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveClusterGroup(q.groupId || q.groupStem!)}
+                            className="text-xs font-bold text-rose-300 hover:text-rose-200 bg-rose-950/60 hover:bg-rose-900 px-2.5 py-1 rounded-lg border border-rose-500/40 transition-colors flex items-center gap-1 shadow-sm"
+                            title="Tách các câu hỏi trong cụm này thành các câu độc lập (không chung dữ kiện)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Tách Độc Lập</span>
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-sm font-medium text-slate-100 bg-slate-950/70 p-3.5 rounded-xl border border-indigo-500/20 leading-relaxed font-sans">
+                        <MathText text={q.groupStem!} />
+                      </div>
+                    </div>
+                  )}
                   <div
                     className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-md space-y-3 relative hover:border-slate-700 transition-colors"
                   >
@@ -1670,6 +1997,12 @@ Câu 3: Tìm giá trị lớn nhất của hàm số trên đoạn [0; 3].
                         <span className="bg-indigo-600 text-white font-black text-xs px-3 py-1 rounded-xl">
                           Câu {idx + 1}
                         </span>
+                        {q.type === 'mc' && q.groupStem && (
+                          <span className="text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-500/40 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                            <BookOpen className="w-3 h-3" />
+                            <span>Thuộc chùm câu có dữ kiện chung</span>
+                          </span>
+                        )}
                         <span className="text-[11px] font-bold bg-slate-800 text-indigo-300 px-2.5 py-1 rounded-xl uppercase">
                           {q.type === 'mc' ? 'Phần I (ABCD)' : q.type === 'tf' ? 'Phần II (Đ/S)' : q.type === 'short' ? 'Phần III (Ngắn)' : 'Tự luận'}
                         </span>

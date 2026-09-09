@@ -252,9 +252,36 @@ export function exportExamToWord(exam: Exam, options: { includeAnswers?: boolean
         <div class="part-header">PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn (${part1.length} câu)</div>
         <div class="part-desc">Thí sinh trả lời từ câu 1 đến câu ${part1.length}. Mỗi câu hỏi thí sinh chỉ chọn một phương án.</div>
         ${part1
-          .map((q) => {
+          .map((q, pIdx) => {
             questionCounter++;
+            const prevQ = pIdx > 0 ? part1[pIdx - 1] : null;
+            const isClusterStart = Boolean(
+              q.groupStem &&
+              q.groupStem.trim() &&
+              (!prevQ || prevQ.groupId !== q.groupId || prevQ.groupStem !== q.groupStem)
+            );
+            let clusterHeaderHtml = '';
+            if (isClusterStart) {
+              let cEnd = pIdx;
+              while (
+                cEnd + 1 < part1.length &&
+                part1[cEnd + 1].groupId === q.groupId &&
+                part1[cEnd + 1].groupStem === q.groupStem
+              ) {
+                cEnd++;
+              }
+              const startNum = questionCounter;
+              const endNum = questionCounter + (cEnd - pIdx);
+              clusterHeaderHtml = `
+                <div style="background-color: #f1f5f9; border: 1.5px solid #4f46e5; border-radius: 6px; padding: 10px 14px; margin: 14px 0 10px 0;">
+                  <b style="color: #312e81; font-size: 11pt;">[DỮ KIỆN CHUNG CHO CÁC CÂU ${startNum} - ${endNum}]:</b>
+                  <div style="font-size: 11pt; margin-top: 4px; text-align: justify;">${formatMathForHtml(q.groupStem || '')}</div>
+                </div>
+              `;
+            }
+
             return `
+            ${clusterHeaderHtml}
             <div class="question-item">
               ${renderQuestionLeadingHtml(q, questionCounter, 'q-img')}
               ${
@@ -584,9 +611,36 @@ export function exportExamToPDF(exam: Exam) {
         <div class="part-heading">PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn (${part1.length} câu)</div>
         <div class="part-subtext">Thí sinh trả lời từ câu 1 đến câu ${part1.length}. Mỗi câu hỏi chỉ chọn một phương án.</div>
         ${part1
-          .map((q) => {
+          .map((q, pIdx) => {
             questionCounter++;
+            const prevQ = pIdx > 0 ? part1[pIdx - 1] : null;
+            const isClusterStart = Boolean(
+              q.groupStem &&
+              q.groupStem.trim() &&
+              (!prevQ || prevQ.groupId !== q.groupId || prevQ.groupStem !== q.groupStem)
+            );
+            let clusterHeaderHtml = '';
+            if (isClusterStart) {
+              let cEnd = pIdx;
+              while (
+                cEnd + 1 < part1.length &&
+                part1[cEnd + 1].groupId === q.groupId &&
+                part1[cEnd + 1].groupStem === q.groupStem
+              ) {
+                cEnd++;
+              }
+              const startNum = questionCounter;
+              const endNum = questionCounter + (cEnd - pIdx);
+              clusterHeaderHtml = `
+                <div style="background-color: #f8fafc; border: 1.5px solid #4338ca; border-radius: 6px; padding: 8px 12px; margin: 12px 0 8px 0;">
+                  <b style="color: #312e81; font-size: 11pt;">[DỮ KIỆN CHUNG CHO CÁC CÂU ${startNum} - ${endNum}]:</b>
+                  <div style="font-size: 11pt; margin-top: 3px; text-align: justify;">${formatMathForHtml(q.groupStem || '')}</div>
+                </div>
+              `;
+            }
+
             return `
+            ${clusterHeaderHtml}
             <div class="q-container">
               ${renderQuestionLeadingHtml(q, questionCounter, 'q-image')}
               ${

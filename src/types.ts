@@ -6,7 +6,9 @@ export interface Question {
   id: string;
   type: QuestionType;
   points?: number; // Điểm số tùy chỉnh cho câu hỏi (mặc định: 0.25 cho Phần I, 0.5 cho Phần III)
-  stem?: string; // Đoạn văn dẫn / dữ kiện chung
+  groupStem?: string; // Dữ kiện chung cho cụm câu hỏi liên tiếp nhau (tối đa 10 câu, Phần I)
+  groupId?: string; // Mã định danh nhóm/cụm câu hỏi chung dữ kiện
+  stem?: string; // Đoạn văn dẫn / dữ kiện riêng của câu hỏi
   image?: string | null; // Hình ảnh đính kèm base64 hoặc URL
   audio?: string | null; // Tệp âm thanh đính kèm base64 hoặc URL
   audioName?: string | null; // Tên tệp âm thanh (ví dụ: track01.mp3)
