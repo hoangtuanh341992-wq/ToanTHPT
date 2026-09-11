@@ -19,16 +19,8 @@ function escapeHtml(text: string): string {
  */
 function formatMathForHtml(text: string): string {
   if (!text) return '';
-  // Convert newlines to breaks and preserve safe inline formatting tags for English & typography
-  let html = escapeHtml(text).replace(/\n/g, '<br/>');
-  html = html
-    .replace(/&lt;u&gt;/gi, '<u style="text-decoration: underline; font-weight: 600;">')
-    .replace(/&lt;\/u&gt;/gi, '</u>')
-    .replace(/&lt;b&gt;/gi, '<b>')
-    .replace(/&lt;\/b&gt;/gi, '</b>')
-    .replace(/&lt;i&gt;/gi, '<i>')
-    .replace(/&lt;\/i&gt;/gi, '</i>');
-  return html;
+  // Convert newlines to breaks
+  return escapeHtml(text).replace(/\n/g, '<br/>');
 }
 
 /**
