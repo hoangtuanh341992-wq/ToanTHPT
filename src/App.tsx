@@ -169,17 +169,33 @@ export default function App() {
       }
     });
 
-    // 2. Subscribe to Cloud Exams
+    // 2. Subscribe to Cloud Exams - SMART MERGE TO PREVENT OVERWRITING LOCAL EXAMS
     const unsubExams = subscribeExams((cloudExams) => {
       if (cloudExams && Array.isArray(cloudExams)) {
-        setExams(cloudExams);
+        setExams((currentLocalExams) => {
+          const cloudIds = new Set(cloudExams.map((e) => e.id));
+          const pendingSync = currentLocalExams.filter((e) => !cloudIds.has(e.id));
+          if (pendingSync.length > 0) {
+            // Re-sync any unsynced local exams to cloud in background
+            pendingSync.forEach((ex) => saveExamToCloud(ex));
+          }
+          return [...pendingSync, ...cloudExams];
+        });
       }
     });
 
-    // 3. Subscribe to Cloud Question Bank
+    // 3. Subscribe to Cloud Question Bank - SMART MERGE TO PREVENT OVERWRITING LOCAL BANK
     const unsubBank = subscribeQuestionBank((cloudBank) => {
       if (cloudBank && Array.isArray(cloudBank)) {
-        setQuestionBank(cloudBank);
+        setQuestionBank((currentLocalBank) => {
+          const cloudIds = new Set(cloudBank.map((q) => q.id));
+          const pendingSync = currentLocalBank.filter((q) => !cloudIds.has(q.id));
+          if (pendingSync.length > 0) {
+            // Re-sync any unsynced local questions to cloud in background
+            pendingSync.forEach((q) => saveQuestionToCloud(q));
+          }
+          return [...pendingSync, ...cloudBank];
+        });
       }
     });
 
@@ -395,7 +411,37 @@ export default function App() {
       authorUsername: currentUser?.username || 'admin',
     });
 
-    setExams((prev) => [...generatedVariants, ...prev]);
+    // 1. Permanent Local Backup of drafted questions and published variants
+    setStorageItem(STORAGE_KEYS.LAST_PUBLISHED_BACKUP, {
+      timestamp: Date.now(),
+      title: data.title,
+      questions: draftingQuestions,
+      variants: generatedVariants,
+    });
+
+    // 2. Also automatically preserve all drafted questions in the Question Bank
+    const stampedQs = draftingQuestions.map((q) => ({
+      ...q,
+      createdById: currentUser?.id,
+      createdByName: currentUser?.name || currentUser?.displayName,
+    }));
+    setQuestionBank((prev) => {
+      const existingIds = new Set(prev.map((item) => item.id));
+      const newItems = stampedQs.filter((item) => !existingIds.has(item.id));
+      const updatedBank = [...newItems, ...prev];
+      setStorageItem(STORAGE_KEYS.QBANK, updatedBank);
+      return updatedBank;
+    });
+
+    // 3. Immediately persist exams locally to prevent any race condition
+    setExams((prev) => {
+      const updated = [...generatedVariants, ...prev];
+      setStorageItem(STORAGE_KEYS.EXAMS, updated);
+      return updated;
+    });
+
+    // 4. Asynchronously push questions & variants to Firebase Cloud
+    stampedQs.forEach((q) => saveQuestionToCloud(q));
     generatedVariants.forEach((exam) => saveExamToCloud(exam));
 
     setDraftingQuestions([]);

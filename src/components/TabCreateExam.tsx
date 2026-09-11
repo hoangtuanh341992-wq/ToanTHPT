@@ -2132,12 +2132,33 @@ Câu 3: Tìm giá trị lớn nhất của hàm số trên đoạn [0; 3].
         })()}
 
         {draftingQuestions.length === 0 ? (
-          <div className="text-center py-16 bg-slate-900/50 rounded-3xl border border-dashed border-slate-800 space-y-2">
+          <div className="text-center py-12 bg-slate-900/50 rounded-3xl border border-dashed border-slate-800 space-y-3 px-4">
             <HelpCircle className="w-8 h-8 text-slate-600 mx-auto opacity-50" />
             <p className="text-sm font-bold text-slate-400">Chưa có câu hỏi nào trong danh sách soạn thảo.</p>
             <p className="text-xs text-slate-500">
               Hãy nhập câu hỏi ở form phía trên hoặc dán văn bản để phân tích tự động.
             </p>
+            {(() => {
+              const lastBackup = getStorageItem<any>(STORAGE_KEYS.LAST_PUBLISHED_BACKUP, null);
+              if (lastBackup && Array.isArray(lastBackup.questions) && lastBackup.questions.length > 0) {
+                return (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onDraftQuestionsChange(lastBackup.questions);
+                        showToast(`Đã khôi phục ${lastBackup.questions.length} câu hỏi từ bộ soạn gần nhất!`, 'success');
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 rounded-xl text-xs font-bold transition-all shadow-md hover:scale-[1.02]"
+                    >
+                      <RotateCcw className="w-4 h-4 text-indigo-400" />
+                      <span>Khôi phục {lastBackup.questions.length} câu hỏi từ bộ vừa soạn/xuất bản ({lastBackup.title || 'Gần nhất'})</span>
+                    </button>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
         ) : (
           <div className="space-y-4">
