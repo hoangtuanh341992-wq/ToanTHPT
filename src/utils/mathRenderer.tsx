@@ -60,10 +60,57 @@ export const MathText: React.FC<MathTextProps> = ({ text, className = '' }) => {
           );
         }
       } else {
-        // Plain text with line breaks preserved
+        // Plain text with line breaks and inline formatting (<u>, <b>, <i>) preserved
+        if (
+          !part.includes('<u>') &&
+          !part.includes('<b>') &&
+          !part.includes('<i>') &&
+          !part.includes('<U>') &&
+          !part.includes('<B>') &&
+          !part.includes('<I>')
+        ) {
+          return (
+            <span key={index} className="whitespace-pre-line">
+              {part}
+            </span>
+          );
+        }
+
+        const inlineRegex = /(<u>[\s\S]*?<\/u>|<b>[\s\S]*?<\/b>|<i>[\s\S]*?<\/i>)/gi;
+        const segments = part.split(inlineRegex);
+
         return (
           <span key={index} className="whitespace-pre-line">
-            {part}
+            {segments.map((seg, sIdx) => {
+              if (/^<u>[\s\S]*?<\/u>$/i.test(seg)) {
+                const inner = seg.replace(/^<u>/i, '').replace(/<\/u>$/i, '');
+                return (
+                  <u
+                    key={sIdx}
+                    className="underline underline-offset-4 decoration-2 decoration-amber-400 text-amber-300 font-bold"
+                  >
+                    {inner}
+                  </u>
+                );
+              }
+              if (/^<b>[\s\S]*?<\/b>$/i.test(seg)) {
+                const inner = seg.replace(/^<b>/i, '').replace(/<\/b>$/i, '');
+                return (
+                  <strong key={sIdx} className="font-bold text-white">
+                    {inner}
+                  </strong>
+                );
+              }
+              if (/^<i>[\s\S]*?<\/i>$/i.test(seg)) {
+                const inner = seg.replace(/^<i>/i, '').replace(/<\/i>$/i, '');
+                return (
+                  <em key={sIdx} className="italic text-slate-200">
+                    {inner}
+                  </em>
+                );
+              }
+              return <span key={sIdx}>{seg}</span>;
+            })}
           </span>
         );
       }
