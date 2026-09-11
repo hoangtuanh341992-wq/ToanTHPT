@@ -106,10 +106,8 @@ export default function App() {
   });
   const [editingDraftIndex, setEditingDraftIndex] = useState<number>(-1);
 
-  // Network Status
-  const [isOnline, setIsOnline] = useState<boolean>(
-    typeof navigator !== 'undefined' ? navigator.onLine : true
-  );
+  // Network Status (Defaults to true, verified dynamically)
+  const [isOnline, setIsOnline] = useState<boolean>(true);
 
   // Preset code for taking exam
   const [presetExamCode, setPresetExamCode] = useState<string | null>(null);
@@ -279,18 +277,48 @@ export default function App() {
     };
   }, []);
 
-  // Network online/offline event listeners
+  // Network online/offline event listeners & active health check
   useEffect(() => {
+    const checkConnection = () => {
+      fetch('/api/health', { cache: 'no-store' })
+        .then((r) => {
+          if (r.ok) setIsOnline(true);
+        })
+        .catch(() => {
+          if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            setIsOnline(false);
+          }
+        });
+    };
+
+    // Immediate check
+    checkConnection();
+
     const handleOnline = () => {
       setIsOnline(true);
-      showToast('Đã kết nối Internet! Dữ liệu đang được đồng bộ đám mây.', 'success');
+      showToast('Đã kết nối trực tuyến! Dữ liệu đang được đồng bộ đám mây.', 'success');
     };
     const handleOffline = () => {
-      setIsOnline(false);
-      showToast(
-        'Đang ở chế độ Ngoại Tuyến (Offline): Toàn bộ dữ liệu được lưu an toàn trên máy của bạn.',
-        'info'
-      );
+      // Confirm with ping before displaying offline state
+      fetch('/api/health', { cache: 'no-store' })
+        .then((r) => {
+          if (r.ok) {
+            setIsOnline(true);
+          } else {
+            setIsOnline(false);
+            showToast(
+              'Đang ở chế độ Ngoại Tuyến (Offline): Toàn bộ dữ liệu được lưu an toàn trên máy của bạn.',
+              'info'
+            );
+          }
+        })
+        .catch(() => {
+          setIsOnline(false);
+          showToast(
+            'Đang ở chế độ Ngoại Tuyến (Offline): Toàn bộ dữ liệu được lưu an toàn trên máy của bạn.',
+            'info'
+          );
+        });
     };
 
     window.addEventListener('online', handleOnline);

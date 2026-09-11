@@ -41,24 +41,29 @@ app.get('/api/sync', (req, res) => {
 
 // 2. Real-time Server-Sent Events (SSE) Stream
 app.get('/api/sync/stream', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable buffering for nginx reverse proxy
+  res.setHeader('Access-Control-Allow-Origin', '*');
   if (typeof (res as any).flushHeaders === 'function') {
     (res as any).flushHeaders();
   }
 
   addSseClient(res);
 
-  // Keep-alive ping every 25 seconds
+  // Keep-alive ping every 15 seconds
   const pingInterval = setInterval(() => {
     try {
       res.write(': ping\n\n');
+      if (typeof (res as any).flush === 'function') {
+        (res as any).flush();
+      }
     } catch {
       clearInterval(pingInterval);
       removeSseClient(res);
     }
-  }, 25000);
+  }, 15000);
 
   req.on('close', () => {
     clearInterval(pingInterval);

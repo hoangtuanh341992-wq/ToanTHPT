@@ -175,7 +175,24 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
       };
 
       eventSource.onerror = () => {
-        callbacks.onStatusChange?.('offline');
+        // SSE reconnecting or momentarily disrupted.
+        // DO NOT falsely mark offline if the user has active internet and the HTTP server responds!
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          callbacks.onStatusChange?.('offline');
+        } else {
+          fetchServerSync().then((data) => {
+            if (data) {
+              callbacks.onStatusChange?.('connected');
+            } else if (typeof navigator !== 'undefined' && !navigator.onLine) {
+              callbacks.onStatusChange?.('offline');
+            }
+          }).catch(() => {
+            if (typeof navigator !== 'undefined' && !navigator.onLine) {
+              callbacks.onStatusChange?.('offline');
+            }
+          });
+        }
+
         if (eventSource) {
           eventSource.close();
           eventSource = null;
@@ -187,7 +204,9 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
       };
     } catch (err) {
       console.warn('[SyncEngine] EventSource setup error:', err);
-      callbacks.onStatusChange?.('offline');
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        callbacks.onStatusChange?.('offline');
+      }
       if (!isUnmounted) {
         reconnectTimer = setTimeout(connectSSE, 4000);
       }
@@ -205,14 +224,15 @@ export function startSyncListener(callbacks: SyncCallbacks): () => void {
   // 2. Connect real-time SSE stream
   connectSSE();
 
-  // 3. Fallback heartbeat polling every 12 seconds to guarantee sync even on flaky networks
+  // 3. Fallback heartbeat polling every 10 seconds to guarantee sync even on flaky networks
   pollInterval = setInterval(async () => {
     if (isUnmounted) return;
     const latest = await fetchServerSync();
     if (!isUnmounted && latest) {
       applyState(latest);
+      callbacks.onStatusChange?.('connected');
     }
-  }, 12000);
+  }, 10000);
 
   return () => {
     isUnmounted = true;
