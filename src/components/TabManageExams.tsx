@@ -24,7 +24,6 @@ import {
   User,
   Lock,
   Sparkles,
-  CloudUpload,
 } from 'lucide-react';
 
 interface TabManageExamsProps {
@@ -42,8 +41,6 @@ interface TabManageExamsProps {
   onImportSystemData: (file: File) => void;
   onGoToCreate: () => void;
   onOpenAICloneExam?: (exam: Exam) => void;
-  onForceCloudSync?: () => void;
-  isSyncingCloud?: boolean;
   showToast: (msg: string, type?: 'info' | 'success' | 'error' | 'warning') => void;
 }
 
@@ -62,8 +59,6 @@ export const TabManageExams: React.FC<TabManageExamsProps> = ({
   onImportSystemData,
   onGoToCreate,
   onOpenAICloneExam,
-  onForceCloudSync,
-  isSyncingCloud = false,
   showToast,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -200,19 +195,6 @@ export const TabManageExams: React.FC<TabManageExamsProps> = ({
             >
               <KeyRound className="w-4 h-4 text-amber-400" />
               <span>Đổi PIN</span>
-            </button>
-          )}
-
-          {onForceCloudSync && (
-            <button
-              type="button"
-              onClick={onForceCloudSync}
-              disabled={isSyncingCloud}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold px-3.5 py-2.5 rounded-xl transition-all border border-slate-700 flex items-center gap-1.5 disabled:opacity-50"
-              title="Đồng bộ ngay toàn bộ đề thi, câu hỏi và kết quả lên Đám mây trực tuyến"
-            >
-              <CloudUpload className={`w-4 h-4 text-cyan-400 ${isSyncingCloud ? 'animate-spin' : ''}`} />
-              <span>{isSyncingCloud ? 'Đang Đồng Bộ...' : 'Đồng Bộ Đám Mây'}</span>
             </button>
           )}
 

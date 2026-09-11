@@ -87,36 +87,6 @@ export function subscribeSystemPin(callback: (pin: string) => void): () => void 
 }
 
 // -------------------------------------------------------------
-// HELPER: Deep Recursive Sanitizer for Firestore
-// -------------------------------------------------------------
-/**
- * Recursively sanitize any object or array for Firestore:
- * - Removes keys with `undefined` values completely
- * - Recursively processes nested objects and arrays of objects (questions, options, blanks, pairs)
- * - Ensures 100% compliance with Firestore constraints so setDoc never rejects with "Unsupported field value: undefined"
- */
-export function sanitizeForFirestore<T>(data: T): any {
-  if (data === undefined) {
-    return null;
-  }
-  if (data === null || typeof data !== 'object') {
-    return data;
-  }
-  if (Array.isArray(data)) {
-    return data
-      .filter((item) => item !== undefined)
-      .map((item) => sanitizeForFirestore(item));
-  }
-  const cleaned: Record<string, any> = {};
-  for (const [key, value] of Object.entries(data as Record<string, any>)) {
-    if (value !== undefined) {
-      cleaned[key] = sanitizeForFirestore(value);
-    }
-  }
-  return cleaned;
-}
-
-// -------------------------------------------------------------
 // EXAMS (Real-time Cloud Sync)
 // -------------------------------------------------------------
 
@@ -126,7 +96,15 @@ export function subscribeExams(callback: (exams: Exam[]) => void): () => void {
     colRef,
     async (snapshot) => {
       if (snapshot.empty) {
-        callback([]);
+        // Seed initial sample exams if cloud is completely empty
+        try {
+          for (const exam of initialExams) {
+            await setDoc(doc(db, COLLECTIONS.EXAMS, exam.id), exam);
+          }
+        } catch (e) {
+          console.warn('[Firebase] Seeding initial exams error:', e);
+        }
+        callback(initialExams);
         return;
       }
 
@@ -199,8 +177,7 @@ export async function saveExamToCloud(exam: Exam): Promise<boolean> {
     };
 
     const docRef = doc(db, COLLECTIONS.EXAMS, exam.id);
-    const sanitizedExam = sanitizeForFirestore(examToSave);
-    await setDoc(docRef, sanitizedExam, { merge: true });
+    await setDoc(docRef, examToSave, { merge: true });
     return true;
   } catch (error) {
     console.error('[Firebase] saveExamToCloud error:', error);
@@ -229,7 +206,15 @@ export function subscribeQuestionBank(callback: (questions: Question[]) => void)
     colRef,
     async (snapshot) => {
       if (snapshot.empty) {
-        callback([]);
+        // Seed initial sample question bank
+        try {
+          for (const q of initialQuestionBank) {
+            await setDoc(doc(db, COLLECTIONS.QBANK, q.id), q);
+          }
+        } catch (e) {
+          console.warn('[Firebase] Seeding initial qbank error:', e);
+        }
+        callback(initialQuestionBank);
         return;
       }
 
@@ -275,8 +260,7 @@ export async function saveQuestionToCloud(question: Question): Promise<boolean> 
       qToSave = { ...question, audio: cloudRef };
     }
     const docRef = doc(db, COLLECTIONS.QBANK, qToSave.id);
-    const sanitizedQ = sanitizeForFirestore(qToSave);
-    await setDoc(docRef, sanitizedQ, { merge: true });
+    await setDoc(docRef, qToSave, { merge: true });
     return true;
   } catch (error) {
     console.error('[Firebase] saveQuestionToCloud error:', error);
@@ -321,8 +305,7 @@ export function subscribeExamResults(callback: (results: ExamResult[]) => void):
 export async function submitExamResultToCloud(result: ExamResult): Promise<boolean> {
   try {
     const docRef = doc(db, COLLECTIONS.RESULTS, result.id);
-    const sanitizedResult = sanitizeForFirestore(result);
-    await setDoc(docRef, sanitizedResult, { merge: true });
+    await setDoc(docRef, result, { merge: true });
     return true;
   } catch (error) {
     console.error('[Firebase] submitExamResultToCloud error:', error);
@@ -358,6 +341,21 @@ export const DEFAULT_ROOT_ADMIN: UserAccount = {
   isActive: true,
   lastLoginAt: new Date().toISOString(),
 };
+
+// Helper to clean objects for Firestore (remove undefined values)
+function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const cleaned: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        cleaned[key] = sanitizeForFirestore(value);
+      } else {
+        cleaned[key] = value;
+      }
+    }
+  }
+  return cleaned;
+}
 
 export function subscribeUsers(callback: (users: UserAccount[]) => void): () => void {
   const colRef = collection(db, COLLECTIONS.USERS);
@@ -426,41 +424,3 @@ export async function deleteUserFromCloud(userId: string): Promise<boolean> {
     return false;
   }
 }
-
-/**
- * Manually or automatically trigger full synchronization of all data to Cloud Firestore
- */
-export async function syncAllLocalDataToCloud(
-  exams: Exam[],
-  bank: Question[],
-  results: ExamResult[],
-  users: UserAccount[]
-): Promise<{ examsSynced: number; questionsSynced: number; resultsSynced: number; usersSynced: number }> {
-  let examsSynced = 0;
-  let questionsSynced = 0;
-  let resultsSynced = 0;
-  let usersSynced = 0;
-
-  for (const ex of exams) {
-    const success = await saveExamToCloud(ex);
-    if (success) examsSynced++;
-  }
-
-  for (const q of bank) {
-    const success = await saveQuestionToCloud(q);
-    if (success) questionsSynced++;
-  }
-
-  for (const res of results) {
-    const success = await submitExamResultToCloud(res);
-    if (success) resultsSynced++;
-  }
-
-  for (const u of users) {
-    const success = await saveUserToCloud(u);
-    if (success) usersSynced++;
-  }
-
-  return { examsSynced, questionsSynced, resultsSynced, usersSynced };
-}
-

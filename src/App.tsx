@@ -23,23 +23,8 @@ import {
   subscribeUsers,
   saveUserToCloud,
   deleteUserFromCloud,
-  syncAllLocalDataToCloud,
   DEFAULT_ROOT_ADMIN,
 } from './lib/firebase';
-import {
-  startSyncListener,
-  serverUpsertExam,
-  serverDeleteExam,
-  serverUpsertQuestion,
-  serverDeleteQuestion,
-  serverSubmitResult,
-  serverDeleteResult,
-  serverClearResults,
-  serverUpsertUser,
-  serverDeleteUser,
-  serverUpdatePin,
-  serverFullSync,
-} from './lib/syncEngine';
 import { Header } from './components/Header';
 import { TabTakeExam } from './components/TabTakeExam';
 import { TabCreateExam } from './components/TabCreateExam';
@@ -106,8 +91,10 @@ export default function App() {
   });
   const [editingDraftIndex, setEditingDraftIndex] = useState<number>(-1);
 
-  // Network Status (Defaults to true, verified dynamically)
-  const [isOnline, setIsOnline] = useState<boolean>(true);
+  // Network Status
+  const [isOnline, setIsOnline] = useState<boolean>(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
 
   // Preset code for taking exam
   const [presetExamCode, setPresetExamCode] = useState<string | null>(null);
@@ -173,102 +160,49 @@ export default function App() {
     setStorageItem(STORAGE_KEYS.USERS, users);
   }, [users]);
 
-  // Real-Time Multi-Device & Cross-Tab Sync Engine (SSE + Cloud Redundancy)
+  // Firebase Real-Time Cloud Listeners (Subscribes to Exams, Bank, Results, PIN, Users)
   useEffect(() => {
-    let hasCheckedBootstrap = false;
-
-    // 1. Primary Real-Time Synchronization via Server-Sent Events & API
-    const unsubServer = startSyncListener({
-      onExams: (cloudExams) => {
-        if (Array.isArray(cloudExams)) {
-          setExams(cloudExams);
-          setStorageItem(STORAGE_KEYS.EXAMS, cloudExams);
-
-          // On first receive, check if this device has local exams not on server and push them
-          if (!hasCheckedBootstrap) {
-            hasCheckedBootstrap = true;
-            const local = getStorageItem<Exam[]>(STORAGE_KEYS.EXAMS, []);
-            if (local && local.length > 0) {
-              const serverExamIds = new Set(cloudExams.map((e) => e.id));
-              const missingLocals = local.filter((e) => !serverExamIds.has(e.id));
-              if (missingLocals.length > 0) {
-                console.log(`[SyncEngine] Auto-pushing ${missingLocals.length} local exams to server...`);
-                missingLocals.forEach((ex) => serverUpsertExam(ex));
-              }
-            }
-          }
-        }
-      },
-      onQuestionBank: (cloudBank) => {
-        if (Array.isArray(cloudBank)) {
-          setQuestionBank(cloudBank);
-          setStorageItem(STORAGE_KEYS.QBANK, cloudBank);
-        }
-      },
-      onResults: (cloudResults) => {
-        if (Array.isArray(cloudResults)) {
-          setResults(cloudResults);
-          setStorageItem(STORAGE_KEYS.RESULTS, cloudResults);
-        }
-      },
-      onUsers: (cloudUsers) => {
-        if (Array.isArray(cloudUsers) && cloudUsers.length > 0) {
-          setUsers(cloudUsers);
-          setStorageItem(STORAGE_KEYS.USERS, cloudUsers);
-        }
-      },
-      onPin: (cloudPin) => {
-        if (cloudPin) {
-          setSystemPin(cloudPin);
-          setStorageItem(STORAGE_KEYS.PIN, cloudPin);
-        }
-      },
-      onStatusChange: (status) => {
-        setIsOnline(status !== 'offline');
-      },
-    });
-
-    // 2. Secondary Firestore Listeners (Fail-safe cloud redundancy)
+    // 1. Subscribe to Cloud PIN
     const unsubPin = subscribeSystemPin((cloudPin) => {
       if (cloudPin && cloudPin !== systemPin) {
         setSystemPin(cloudPin);
       }
     });
 
+    // 2. Subscribe to Cloud Exams
     const unsubExams = subscribeExams((cloudExams) => {
-      if (cloudExams && Array.isArray(cloudExams) && cloudExams.length > 0) {
+      if (cloudExams && Array.isArray(cloudExams)) {
         setExams(cloudExams);
-        setStorageItem(STORAGE_KEYS.EXAMS, cloudExams);
       }
     });
 
+    // 3. Subscribe to Cloud Question Bank
     const unsubBank = subscribeQuestionBank((cloudBank) => {
-      if (cloudBank && Array.isArray(cloudBank) && cloudBank.length > 0) {
+      if (cloudBank && Array.isArray(cloudBank)) {
         setQuestionBank(cloudBank);
-        setStorageItem(STORAGE_KEYS.QBANK, cloudBank);
       }
     });
 
+    // 4. Subscribe to Cloud Exam Results (Real-time student submissions)
     const unsubResults = subscribeExamResults((cloudResults) => {
-      if (cloudResults && Array.isArray(cloudResults) && cloudResults.length > 0) {
+      if (cloudResults && Array.isArray(cloudResults)) {
         setResults(cloudResults);
-        setStorageItem(STORAGE_KEYS.RESULTS, cloudResults);
       }
     });
 
+    // 5. Subscribe to Cloud Users
     const unsubUsers = subscribeUsers((cloudUsers) => {
       if (cloudUsers && Array.isArray(cloudUsers) && cloudUsers.length > 0) {
         setUsers(cloudUsers);
-        setStorageItem(STORAGE_KEYS.USERS, cloudUsers);
       }
     });
 
+    // Initial PIN fetch
     fetchSystemPin().then((pin) => {
       if (pin) setSystemPin(pin);
     });
 
     return () => {
-      unsubServer();
       unsubPin();
       unsubExams();
       unsubBank();
@@ -277,48 +211,18 @@ export default function App() {
     };
   }, []);
 
-  // Network online/offline event listeners & active health check
+  // Network online/offline event listeners
   useEffect(() => {
-    const checkConnection = () => {
-      fetch('/api/health', { cache: 'no-store' })
-        .then((r) => {
-          if (r.ok) setIsOnline(true);
-        })
-        .catch(() => {
-          if (typeof navigator !== 'undefined' && !navigator.onLine) {
-            setIsOnline(false);
-          }
-        });
-    };
-
-    // Immediate check
-    checkConnection();
-
     const handleOnline = () => {
       setIsOnline(true);
-      showToast('Đã kết nối trực tuyến! Dữ liệu đang được đồng bộ đám mây.', 'success');
+      showToast('Đã kết nối Internet! Dữ liệu đang được đồng bộ đám mây.', 'success');
     };
     const handleOffline = () => {
-      // Confirm with ping before displaying offline state
-      fetch('/api/health', { cache: 'no-store' })
-        .then((r) => {
-          if (r.ok) {
-            setIsOnline(true);
-          } else {
-            setIsOnline(false);
-            showToast(
-              'Đang ở chế độ Ngoại Tuyến (Offline): Toàn bộ dữ liệu được lưu an toàn trên máy của bạn.',
-              'info'
-            );
-          }
-        })
-        .catch(() => {
-          setIsOnline(false);
-          showToast(
-            'Đang ở chế độ Ngoại Tuyến (Offline): Toàn bộ dữ liệu được lưu an toàn trên máy của bạn.',
-            'info'
-          );
-        });
+      setIsOnline(false);
+      showToast(
+        'Đang ở chế độ Ngoại Tuyến (Offline): Toàn bộ dữ liệu được lưu an toàn trên máy của bạn.',
+        'info'
+      );
     };
 
     window.addEventListener('online', handleOnline);
@@ -351,16 +255,6 @@ export default function App() {
       if (e.key === STORAGE_KEYS.DRAFT_QUESTIONS && e.newValue) {
         try {
           setDraftingQuestions(JSON.parse(e.newValue));
-        } catch {}
-      }
-      if (e.key === STORAGE_KEYS.CURRENT_USER) {
-        try {
-          setCurrentUser(e.newValue ? JSON.parse(e.newValue) : null);
-        } catch {}
-      }
-      if (e.key === STORAGE_KEYS.IS_ADMIN) {
-        try {
-          setIsAdmin(e.newValue ? JSON.parse(e.newValue) : false);
         } catch {}
       }
       if (e.key === STORAGE_KEYS.USERS && e.newValue) {
@@ -450,16 +344,8 @@ export default function App() {
       authorName: q.authorName || currentUser?.displayName || 'Quản trị viên',
       authorUsername: q.authorUsername || currentUser?.username || 'admin',
     };
-    setQuestionBank((prev) => {
-      const idx = prev.findIndex((item) => item.id === stampedQ.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = stampedQ;
-        return next;
-      }
-      return [stampedQ, ...prev];
-    });
-    serverUpsertQuestion(stampedQ);
+    setQuestionBank((prev) => [stampedQ, ...prev]);
+    saveQuestionToCloud(stampedQ);
     showToast('Đã lưu câu hỏi vào Ngân hàng đám mây hệ thống!', 'success');
   };
 
@@ -471,12 +357,8 @@ export default function App() {
       authorName: q.authorName || currentUser?.displayName || 'Quản trị viên',
       authorUsername: q.authorUsername || currentUser?.username || 'admin',
     }));
-    setQuestionBank((prev) => {
-      const existingIds = new Set(prev.map((item) => item.id));
-      const newItems = stampedQs.filter((item) => !existingIds.has(item.id));
-      return [...newItems, ...prev];
-    });
-    stampedQs.forEach((q) => serverUpsertQuestion(q));
+    setQuestionBank((prev) => [...stampedQs, ...prev]);
+    stampedQs.forEach((q) => saveQuestionToCloud(q));
     showToast(`Đã đồng bộ toàn bộ ${draftingQuestions.length} câu hỏi lên Ngân hàng đám mây!`, 'success');
   };
 
@@ -513,47 +395,17 @@ export default function App() {
       authorUsername: currentUser?.username || 'admin',
     });
 
-    // 1. Permanent Local Backup of drafted questions and published variants
-    setStorageItem(STORAGE_KEYS.LAST_PUBLISHED_BACKUP, {
-      timestamp: Date.now(),
-      title: data.title,
-      questions: draftingQuestions,
-      variants: generatedVariants,
-    });
-
-    // 2. Also automatically preserve all drafted questions in the Question Bank
-    const stampedQs = draftingQuestions.map((q) => ({
-      ...q,
-      createdById: currentUser?.id,
-      createdByName: currentUser?.name || currentUser?.displayName,
-    }));
-    setQuestionBank((prev) => {
-      const existingIds = new Set(prev.map((item) => item.id));
-      const newItems = stampedQs.filter((item) => !existingIds.has(item.id));
-      const updatedBank = [...newItems, ...prev];
-      setStorageItem(STORAGE_KEYS.QBANK, updatedBank);
-      return updatedBank;
-    });
-
-    // 3. Immediately persist exams locally
-    setExams((prev) => {
-      const updated = [...generatedVariants, ...prev];
-      setStorageItem(STORAGE_KEYS.EXAMS, updated);
-      return updated;
-    });
-
-    // 4. Dual-sync to Server (broadcasts via SSE to all devices in ~50ms) + Firestore
-    stampedQs.forEach((q) => serverUpsertQuestion(q));
-    generatedVariants.forEach((exam) => serverUpsertExam(exam));
+    setExams((prev) => [...generatedVariants, ...prev]);
+    generatedVariants.forEach((exam) => saveExamToCloud(exam));
 
     setDraftingQuestions([]);
     setIsPublishOpen(false);
 
     if (count === 1) {
-      showToast(`Xuất bản đề thi "${data.title}" thành công! Học sinh có thể nhập mã ${data.code} trên mọi thiết bị để thi ngay.`, 'success');
+      showToast(`Xuất bản đề thi "${data.title}" lên Đám mây thành công! Học sinh có thể nhập mã ${data.code} để thi.`, 'success');
     } else {
       const codeList = activeCodes.join(', ');
-      showToast(`Đã tạo và xuất bản trọn bộ ${count} mã đề (${codeList}) đồng bộ tức thì tới mọi thiết bị!`, 'success');
+      showToast(`Đã tạo và xuất bản trọn bộ ${count} mã đề (${codeList}) lên Đám mây thành công!`, 'success');
     }
 
     setCurrentTab('manage');
@@ -565,19 +417,15 @@ export default function App() {
     setExams((prev) =>
       prev.map((e) => (e.id === editingExam.id ? updatedExam : e))
     );
-    serverUpsertExam(updatedExam);
+    saveExamToCloud(updatedExam);
     setEditingExam(null);
-    showToast('Đã cập nhật thông tin đề thi và đồng bộ tới mọi thiết bị!', 'success');
+    showToast('Đã cập nhật thông tin đề thi lên Đám mây!', 'success');
   };
 
   const handleDeleteExam = (id: string) => {
-    setExams((prev) => {
-      const updated = prev.filter((e) => e.id !== id);
-      setStorageItem(STORAGE_KEYS.EXAMS, updated);
-      return updated;
-    });
-    serverDeleteExam(id);
-    showToast('Đã xóa đề thi khỏi hệ thống trên mọi thiết bị!', 'info');
+    setExams((prev) => prev.filter((e) => e.id !== id));
+    deleteExamFromCloud(id);
+    showToast('Đã xóa đề thi khỏi hệ thống đám mây', 'info');
   };
 
   const handleQuickStartExam = (code: string) => {
@@ -593,14 +441,12 @@ export default function App() {
       }
       return [user, ...prev];
     });
-    serverUpsertUser(user);
-    showToast(`Đã lưu tài khoản giáo viên "${user.displayName}" đồng bộ thành công!`, 'success');
+    saveUserToCloud(user);
   };
 
   const handleDeleteUserAccount = (userId: string) => {
     setUsers((prev) => prev.filter((u) => u.id !== userId));
-    serverDeleteUser(userId);
-    showToast('Đã xóa tài khoản giáo viên thành công!', 'info');
+    deleteUserFromCloud(userId);
   };
 
   const handleExportSystemData = () => {
@@ -630,67 +476,31 @@ export default function App() {
         const data = JSON.parse(e.target?.result as string);
         if (data.bank && Array.isArray(data.bank)) {
           setQuestionBank(data.bank);
-          data.bank.forEach((q: Question) => serverUpsertQuestion(q));
+          data.bank.forEach((q: Question) => saveQuestionToCloud(q));
         }
         if (data.exams && Array.isArray(data.exams)) {
           setExams(data.exams);
-          data.exams.forEach((ex: Exam) => serverUpsertExam(ex));
+          data.exams.forEach((ex: Exam) => saveExamToCloud(ex));
         }
         if (data.results && Array.isArray(data.results)) {
           setResults(data.results);
-          data.results.forEach((r: ExamResult) => serverSubmitResult(r));
+          data.results.forEach((r: ExamResult) => submitExamResultToCloud(r));
         }
         if (data.users && Array.isArray(data.users)) {
           setUsers(data.users);
-          data.users.forEach((u: UserAccount) => serverUpsertUser(u));
+          data.users.forEach((u: UserAccount) => saveUserToCloud(u));
         }
         if (data.pin && typeof data.pin === 'string') {
           setSystemPin(data.pin);
-          serverUpdatePin(data.pin);
+          updateSystemPin(data.pin);
         }
 
-        // Full broadcast to all connected devices
-        serverFullSync({
-          exams: data.exams,
-          questionBank: data.bank,
-          results: data.results,
-          users: data.users,
-          systemPin: data.pin,
-        });
-
-        showToast('Đã khôi phục và đồng bộ toàn bộ dữ liệu tới mọi thiết bị thành công!', 'success');
+        showToast('Đã khôi phục và đồng bộ toàn bộ dữ liệu lên Đám mây thành công!', 'success');
       } catch {
         showToast('Tệp JSON sao lưu không hợp lệ!', 'error');
       }
     };
     reader.readAsText(file);
-  };
-
-  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
-
-  const handleForceCloudSync = async () => {
-    setIsSyncingCloud(true);
-    try {
-      // 1. Broadcast full sync to server and all active devices/tabs
-      await serverFullSync({
-        exams,
-        questionBank,
-        results,
-        users,
-        systemPin,
-      });
-
-      // 2. Also dual-sync to Firestore
-      const stats = await syncAllLocalDataToCloud(exams, questionBank, results, users);
-      showToast(
-        `Đã đồng bộ trực tuyến thành công: ${stats.examsSynced} đề thi, ${stats.questionsSynced} câu hỏi, ${stats.resultsSynced} kết quả tới máy chủ và mọi thiết bị khác!`,
-        'success'
-      );
-    } catch {
-      showToast('Đã hoàn tất đồng bộ tới máy chủ và mọi thiết bị!', 'success');
-    } finally {
-      setIsSyncingCloud(false);
-    }
   };
 
   return (
@@ -735,7 +545,7 @@ export default function App() {
                 examAuthorName: res.examAuthorName || matchedExam?.authorName,
               };
               setResults((prev) => [stampedRes, ...prev]);
-              serverSubmitResult(stampedRes);
+              submitExamResultToCloud(stampedRes);
             }}
             showToast={showToast}
             presetExamCode={presetExamCode}
@@ -775,8 +585,6 @@ export default function App() {
               setAiManageExam(ex);
               setIsAiManageCloneOpen(true);
             }}
-            onForceCloudSync={handleForceCloudSync}
-            isSyncingCloud={isSyncingCloud}
             showToast={showToast}
           />
         )}
@@ -789,25 +597,25 @@ export default function App() {
             onClearResults={() => {
               const isSuperAdmin = currentUser?.role === 'super_admin';
               if (isSuperAdmin) {
-                const allIds = results.map((r) => r.id);
-                serverClearResults(allIds);
+                results.forEach((r) => deleteExamResultFromCloud(r.id));
                 setResults([]);
               } else if (currentUser) {
-                const myResultIds = results
-                  .filter((r) => {
-                    if (r.examAuthorId && r.examAuthorId === currentUser.id) return true;
-                    const matched = exams.find((e) => e.code.toUpperCase() === r.examCode.toUpperCase());
-                    return Boolean(matched && (matched.authorId === currentUser.id || matched.authorUsername === currentUser.username));
-                  })
-                  .map((r) => r.id);
-                serverClearResults(myResultIds);
-                const myIdSet = new Set(myResultIds);
-                setResults((prev) => prev.filter((r) => !myIdSet.has(r.id)));
+                const myResultIds = new Set<string>(
+                  results
+                    .filter((r) => {
+                      if (r.examAuthorId && r.examAuthorId === currentUser.id) return true;
+                      const matched = exams.find((e) => e.code.toUpperCase() === r.examCode.toUpperCase());
+                      return Boolean(matched && (matched.authorId === currentUser.id || matched.authorUsername === currentUser.username));
+                    })
+                    .map((r) => r.id)
+                );
+                myResultIds.forEach((id: string) => deleteExamResultFromCloud(id));
+                setResults((prev) => prev.filter((r) => !myResultIds.has(r.id)));
               }
             }}
             onDeleteResult={(id) => {
               setResults((prev) => prev.filter((r) => r.id !== id));
-              serverDeleteResult(id);
+              deleteExamResultFromCloud(id);
             }}
             showToast={showToast}
           />
@@ -826,8 +634,8 @@ export default function App() {
         systemPin={systemPin}
         onChangePin={(newPin) => {
           setSystemPin(newPin);
-          serverUpdatePin(newPin);
-          showToast('Đã cập nhật mã PIN hệ thống và đồng bộ tới mọi thiết bị!', 'success');
+          updateSystemPin(newPin);
+          showToast('Đã cập nhật mã PIN hệ thống lên Đám mây thành công!', 'success');
         }}
         currentUser={currentUser}
         onLogout={handleLogout}
@@ -860,23 +668,13 @@ export default function App() {
           setEditingDraftIndex(draftingQuestions.length);
           setCurrentTab('create');
         }}
-        onDelete={(index, questionId) => {
-          const targetId = questionId || questionBank[index]?.id;
-          if (targetId) {
-            serverDeleteQuestion(targetId);
-            setQuestionBank((prev) => {
-              const updated = prev.filter((q) => q.id !== targetId);
-              setStorageItem(STORAGE_KEYS.QBANK, updated);
-              return updated;
-            });
-          } else {
-            setQuestionBank((prev) => {
-              const updated = prev.filter((_, i) => i !== index);
-              setStorageItem(STORAGE_KEYS.QBANK, updated);
-              return updated;
-            });
+        onDelete={(index) => {
+          const target = questionBank[index];
+          if (target) {
+            deleteQuestionFromCloud(target.id);
           }
-          showToast('Đã xóa câu hỏi khỏi ngân hàng trên mọi thiết bị', 'info');
+          setQuestionBank((prev) => prev.filter((_, i) => i !== index));
+          showToast('Đã xóa câu hỏi khỏi ngân hàng đám mây', 'info');
         }}
         onOpenAIClone={(q) => {
           setAiBankQuestion(q);
@@ -926,8 +724,8 @@ export default function App() {
             authorUsername: currentUser?.username,
           };
           setExams((prev) => [newExam, ...prev]);
-          serverUpsertExam(newExam);
-          showToast(`Đã tạo và lưu đề thi song song "${newTitle}" đồng bộ tới mọi thiết bị!`, 'success');
+          saveExamToCloud(newExam);
+          showToast(`Đã tạo và lưu đề thi song song "${newTitle}" thành công!`, 'success');
         }}
         showToast={showToast}
       />

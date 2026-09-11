@@ -2,23 +2,6 @@ import express from 'express';
 import path from 'path';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
-import {
-  initSyncStore,
-  getSyncState,
-  addSseClient,
-  removeSseClient,
-  upsertExam,
-  deleteExam,
-  upsertQuestion,
-  deleteQuestion,
-  submitResult,
-  deleteResult,
-  clearResults,
-  upsertUser,
-  deleteUser,
-  updatePin,
-  fullSync,
-} from './server/syncStore';
 
 dotenv.config();
 
@@ -26,96 +9,6 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: '15mb' }));
-
-// Initialize persistent real-time sync store
-initSyncStore();
-
-// -------------------------------------------------------------
-// REAL-TIME SYNCHRONIZATION API (Device & Tab Unified)
-// -------------------------------------------------------------
-
-// 1. Get complete unified dataset
-app.get('/api/sync', (req, res) => {
-  res.json({ success: true, data: getSyncState() });
-});
-
-// 2. Real-time Server-Sent Events (SSE) Stream
-app.get('/api/sync/stream', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // Disable buffering for nginx reverse proxy
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  if (typeof (res as any).flushHeaders === 'function') {
-    (res as any).flushHeaders();
-  }
-
-  addSseClient(res);
-
-  // Keep-alive ping every 15 seconds
-  const pingInterval = setInterval(() => {
-    try {
-      res.write(': ping\n\n');
-      if (typeof (res as any).flush === 'function') {
-        (res as any).flush();
-      }
-    } catch {
-      clearInterval(pingInterval);
-      removeSseClient(res);
-    }
-  }, 15000);
-
-  req.on('close', () => {
-    clearInterval(pingInterval);
-    removeSseClient(res);
-  });
-});
-
-// 3. Post mutation / update
-app.post('/api/sync', (req, res) => {
-  const { type, data } = req.body;
-  let updatedState = getSyncState();
-
-  switch (type) {
-    case 'UPSERT_EXAM':
-      if (data && data.id) updatedState = upsertExam(data);
-      break;
-    case 'DELETE_EXAM':
-      if (data && data.id) updatedState = deleteExam(data.id);
-      break;
-    case 'UPSERT_QUESTION':
-      if (data && data.id) updatedState = upsertQuestion(data);
-      break;
-    case 'DELETE_QUESTION':
-      if (data && data.id) updatedState = deleteQuestion(data.id);
-      break;
-    case 'SUBMIT_RESULT':
-      if (data && data.id) updatedState = submitResult(data);
-      break;
-    case 'DELETE_RESULT':
-      if (data && data.id) updatedState = deleteResult(data.id);
-      break;
-    case 'CLEAR_RESULTS':
-      if (data && Array.isArray(data.ids)) updatedState = clearResults(data.ids);
-      break;
-    case 'UPSERT_USER':
-      if (data && data.id) updatedState = upsertUser(data);
-      break;
-    case 'DELETE_USER':
-      if (data && data.id) updatedState = deleteUser(data.id);
-      break;
-    case 'UPDATE_PIN':
-      if (data && typeof data.pin === 'string') updatedState = updatePin(data.pin);
-      break;
-    case 'FULL_SYNC':
-      if (data) updatedState = fullSync(data);
-      break;
-    default:
-      return res.status(400).json({ success: false, error: 'Unknown sync action type' });
-  }
-
-  res.json({ success: true, data: updatedState });
-});
 
 // Lazy GoogleGenAI initialization
 function getGeminiClient(): GoogleGenAI {
