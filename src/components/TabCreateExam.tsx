@@ -31,10 +31,12 @@ import {
   Link as LinkIcon,
   Award,
   BookOpen,
+  Underline,
 } from 'lucide-react';
 import { AudioPlayer } from './AudioPlayer';
 import { AICloneQuestionModal } from './AICloneQuestionModal';
 import { AICloneExamModal } from './AICloneExamModal';
+import { EnglishIpaToolbar } from './EnglishIpaToolbar';
 
 interface TabCreateExamProps {
   draftingQuestions: Question[];
@@ -170,6 +172,185 @@ export const TabCreateExam: React.FC<TabCreateExamProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
+
+  // English & IPA input target tracking
+  const [activeInsertTarget, setActiveInsertTarget] = useState<string>('content');
+  const inputElementsRef = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({});
+  const lastSelectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+
+  const handleRegisterFocus = (key: string, e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setActiveInsertTarget(key);
+    inputElementsRef.current[key] = e.target;
+    lastSelectionRef.current = {
+      start: e.target.selectionStart ?? 0,
+      end: e.target.selectionEnd ?? 0,
+    };
+  };
+
+  const handleRegisterBlur = (_key: string, e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    lastSelectionRef.current = {
+      start: e.target.selectionStart ?? 0,
+      end: e.target.selectionEnd ?? 0,
+    };
+  };
+
+  const handleRegisterSelect = (e: React.SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const target = e.currentTarget;
+    lastSelectionRef.current = {
+      start: target.selectionStart ?? 0,
+      end: target.selectionEnd ?? 0,
+    };
+  };
+
+  const getTargetLabel = (key: string): string => {
+    switch (key) {
+      case 'content':
+        return '3. Nội dung câu hỏi';
+      case 'stem':
+        return '1. Đoạn dẫn';
+      case 'groupStem':
+        return 'Dữ kiện chung cụm';
+      case 'opt_A':
+        return 'Phương án A';
+      case 'opt_B':
+        return 'Phương án B';
+      case 'opt_C':
+        return 'Phương án C';
+      case 'opt_D':
+        return 'Phương án D';
+      case 'tf_a':
+        return 'Mệnh đề a)';
+      case 'tf_b':
+        return 'Mệnh đề b)';
+      case 'tf_c':
+        return 'Mệnh đề c)';
+      case 'tf_d':
+        return 'Mệnh đề d)';
+      case 'short':
+        return 'Đáp án ngắn';
+      case 'guide':
+        return 'Hướng dẫn chấm';
+      default:
+        return '3. Nội dung câu hỏi';
+    }
+  };
+
+  const handleEnglishInsert = (
+    text: string,
+    isWrap: boolean = false,
+    wrapPrefix: string = '<u>',
+    wrapSuffix: string = '</u>',
+    explicitTargetKey?: string
+  ) => {
+    const targetKey = explicitTargetKey || activeInsertTarget || 'content';
+    const el = inputElementsRef.current[targetKey];
+
+    let currentVal = '';
+    if (targetKey === 'content') currentVal = fmContent;
+    else if (targetKey === 'stem') currentVal = fmStem;
+    else if (targetKey === 'groupStem') currentVal = fmGroupStem;
+    else if (targetKey === 'opt_A') currentVal = fmMcOptions.A;
+    else if (targetKey === 'opt_B') currentVal = fmMcOptions.B;
+    else if (targetKey === 'opt_C') currentVal = fmMcOptions.C;
+    else if (targetKey === 'opt_D') currentVal = fmMcOptions.D;
+    else if (targetKey === 'tf_a') currentVal = fmTfStatements.a;
+    else if (targetKey === 'tf_b') currentVal = fmTfStatements.b;
+    else if (targetKey === 'tf_c') currentVal = fmTfStatements.c;
+    else if (targetKey === 'tf_d') currentVal = fmTfStatements.d;
+    else if (targetKey === 'short') currentVal = fmShortAnswer;
+    else if (targetKey === 'guide') currentVal = fmEssayGuide;
+
+    let start = lastSelectionRef.current.start;
+    let end = lastSelectionRef.current.end;
+
+    if (el && typeof el.selectionStart === 'number') {
+      start = el.selectionStart;
+      end = el.selectionEnd ?? start;
+    }
+
+    if (start < 0 || start > currentVal.length) start = currentVal.length;
+    if (end < 0 || end > currentVal.length) end = currentVal.length;
+    if (start > end) {
+      const tmp = start;
+      start = end;
+      end = tmp;
+    }
+
+    let newVal = '';
+    let newCursor = 0;
+
+    if (isWrap) {
+      if (start !== end) {
+        const selected = currentVal.substring(start, end);
+        newVal = currentVal.slice(0, start) + wrapPrefix + selected + wrapSuffix + currentVal.slice(end);
+        newCursor = start + wrapPrefix.length + selected.length + wrapSuffix.length;
+      } else {
+        newVal = currentVal.slice(0, start) + wrapPrefix + wrapSuffix + currentVal.slice(end);
+        newCursor = start + wrapPrefix.length;
+      }
+    } else {
+      newVal = currentVal.slice(0, start) + text + currentVal.slice(end);
+      newCursor = start + text.length;
+    }
+
+    // Update state
+    if (targetKey === 'content') setFmContent(newVal);
+    else if (targetKey === 'stem') setFmStem(newVal);
+    else if (targetKey === 'groupStem') setFmGroupStem(newVal);
+    else if (targetKey === 'opt_A') setFmMcOptions((prev) => ({ ...prev, A: newVal }));
+    else if (targetKey === 'opt_B') setFmMcOptions((prev) => ({ ...prev, B: newVal }));
+    else if (targetKey === 'opt_C') setFmMcOptions((prev) => ({ ...prev, C: newVal }));
+    else if (targetKey === 'opt_D') setFmMcOptions((prev) => ({ ...prev, D: newVal }));
+    else if (targetKey === 'tf_a') setFmTfStatements((prev) => ({ ...prev, a: newVal }));
+    else if (targetKey === 'tf_b') setFmTfStatements((prev) => ({ ...prev, b: newVal }));
+    else if (targetKey === 'tf_c') setFmTfStatements((prev) => ({ ...prev, c: newVal }));
+    else if (targetKey === 'tf_d') setFmTfStatements((prev) => ({ ...prev, d: newVal }));
+    else if (targetKey === 'short') setFmShortAnswer(newVal);
+    else if (targetKey === 'guide') setFmEssayGuide(newVal);
+
+    lastSelectionRef.current = { start: newCursor, end: newCursor };
+
+    if (el) {
+      setTimeout(() => {
+        try {
+          el.focus();
+          el.setSelectionRange(newCursor, newCursor);
+        } catch {
+          // ignore
+        }
+      }, 0);
+    }
+
+    showToast(`Đã chèn ký hiệu vào [${getTargetLabel(targetKey)}]`, 'info');
+  };
+
+  const getAvailableTargets = () => {
+    const targets = [{ key: 'content', label: '3. Nội Dung' }];
+    if (currentFmType === 'mc') {
+      targets.push(
+        { key: 'opt_A', label: 'A' },
+        { key: 'opt_B', label: 'B' },
+        { key: 'opt_C', label: 'C' },
+        { key: 'opt_D', label: 'D' }
+      );
+      if (fmGroupStem) {
+        targets.push({ key: 'groupStem', label: 'Dữ Kiện Cụm' });
+      }
+    } else if (currentFmType === 'tf') {
+      targets.push(
+        { key: 'tf_a', label: 'a)' },
+        { key: 'tf_b', label: 'b)' },
+        { key: 'tf_c', label: 'c)' },
+        { key: 'tf_d', label: 'd)' }
+      );
+    } else if (currentFmType === 'short') {
+      targets.push({ key: 'short', label: 'Đáp Án' });
+    } else if (currentFmType === 'essay') {
+      targets.push({ key: 'guide', label: 'Hướng Dẫn' });
+    }
+    targets.push({ key: 'stem', label: '1. Đoạn Dẫn' });
+    return targets;
+  };
 
   // Auto-save form draft so reloading or network cuts never lose work
   useEffect(() => {
@@ -1050,6 +1231,21 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
             </div>
           </div>
 
+          {/* THANH CÔNG CỤ ĐỊNH DẠNG & KÝ HIỆU TIẾNG ANH (1-CHẠM) */}
+          <EnglishIpaToolbar
+            onInsertText={handleEnglishInsert}
+            currentTargetLabel={getTargetLabel(activeInsertTarget)}
+            currentTargetKey={activeInsertTarget}
+            availableTargets={getAvailableTargets()}
+            onSelectTarget={(key) => {
+              setActiveInsertTarget(key);
+              const el = inputElementsRef.current[key];
+              if (el) {
+                el.focus();
+              }
+            }}
+          />
+
           {/* Stem, Image, and Main Content - STRICT ORDER: 1. STEM -> 2. IMAGE -> 3. CONTENT */}
           <div className="space-y-4">
             {/* HỘP DỮ KIỆN CHUNG CHO CỤM CÂU HỎI LIÊN TIẾP (TỐI ĐA 10 CÂU) - DÀNH CHO PHẦN I TRẮC NGHIỆM ABCD */}
@@ -1096,8 +1292,14 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
 
                 <div className="space-y-1.5">
                   <textarea
+                    ref={(el) => {
+                      inputElementsRef.current['groupStem'] = el;
+                    }}
                     rows={3}
                     value={fmGroupStem}
+                    onFocus={(e) => handleRegisterFocus('groupStem', e)}
+                    onBlur={(e) => handleRegisterBlur('groupStem', e)}
+                    onSelect={handleRegisterSelect}
                     onChange={(e) => setFmGroupStem(e.target.value)}
                     placeholder="Ví dụ: Đọc đoạn thông tin sau và trả lời các câu hỏi từ 1 đến 4: (hoặc Cho đồ thị chuyển động / bảng số liệu thực nghiệm sau...)"
                     className="w-full bg-slate-950 border border-indigo-500/30 focus:border-indigo-400 rounded-xl p-3 text-xs text-slate-100 focus:outline-none font-mono transition-colors"
@@ -1215,8 +1417,14 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
                 <span className="text-[10px] text-slate-500">Ngữ cảnh hoặc bảng biểu chung</span>
               </label>
               <textarea
+                ref={(el) => {
+                  inputElementsRef.current['stem'] = el;
+                }}
                 rows={2}
                 value={fmStem}
+                onFocus={(e) => handleRegisterFocus('stem', e)}
+                onBlur={(e) => handleRegisterBlur('stem', e)}
+                onSelect={handleRegisterSelect}
                 onChange={(e) => setFmStem(e.target.value)}
                 placeholder="Ví dụ: Cho hàm số bậc ba $y = f(x)$ có bảng biến thiên như sau..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
@@ -1364,16 +1572,49 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
 
             {/* 3. Main Question Content */}
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                <span>3. Nội Dung Câu Hỏi * (Hỗ trợ $...$ LaTeX)</span>
-                <span className="text-[10px] text-indigo-400">{"VD: $\\int_0^1 x^2 dx$ hoặc $\\sqrt{x-1}$"}</span>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span>3. Nội Dung Câu Hỏi * (Hỗ trợ $...$ LaTeX &amp; &lt;u&gt;...)</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveInsertTarget('content');
+                        handleEnglishInsert('', true, '<u>', '</u>', 'content');
+                      }}
+                      className="px-2 py-0.5 rounded text-[10px] font-bold text-amber-400 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-500/30 flex items-center gap-1 transition-all active:scale-95 shadow-sm"
+                      title="Gạch chân phát âm <u>...</u> (Bọc từ đang chọn hoặc chèn thẻ <u></u>)"
+                    >
+                      <Underline className="w-3 h-3 text-amber-400" />
+                      <span>&lt;u&gt;Gạch chân&lt;/u&gt;</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveInsertTarget('content');
+                        handleEnglishInsert('ˈ', false, '', '', 'content');
+                      }}
+                      className="px-2 py-0.5 rounded text-[10px] font-bold text-indigo-300 bg-indigo-950/40 hover:bg-indigo-900/50 border border-indigo-500/30 transition-all active:scale-95 shadow-sm"
+                      title="Dấu trọng âm chính ˈ"
+                    >
+                      <span>Trọng âm ( ˈ )</span>
+                    </button>
+                  </div>
+                </div>
+                <span className="text-[10px] text-indigo-400 font-mono">{"VD: cl<u>i</u>mb hoặc $\\sqrt{x-1}$"}</span>
               </label>
               <textarea
+                ref={(el) => {
+                  inputElementsRef.current['content'] = el;
+                }}
                 rows={3}
                 required
                 value={fmContent}
+                onFocus={(e) => handleRegisterFocus('content', e)}
+                onBlur={(e) => handleRegisterBlur('content', e)}
+                onSelect={handleRegisterSelect}
                 onChange={(e) => setFmContent(e.target.value)}
-                placeholder="Nhập nội dung chính của câu hỏi... VD: Tìm tập xác định của hàm số $y = \sqrt{x-1}$"
+                placeholder="Nhập nội dung chính của câu hỏi... VD: Which word has the underlined part pronounced differently? hoặc Tìm tập xác định..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
               />
             </div>
@@ -1417,14 +1658,44 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
                         {opt}.
                       </label>
                       <input
+                        ref={(el) => {
+                          inputElementsRef.current[`opt_${opt}`] = el;
+                        }}
                         type="text"
                         value={fmMcOptions[opt]}
+                        onFocus={(e) => handleRegisterFocus(`opt_${opt}`, e)}
+                        onBlur={(e) => handleRegisterBlur(`opt_${opt}`, e)}
+                        onSelect={handleRegisterSelect}
                         onChange={(e) =>
                           setFmMcOptions({ ...fmMcOptions, [opt]: e.target.value })
                         }
                         placeholder={`Nội dung phương án ${opt}`}
                         className="flex-1 bg-transparent text-xs text-white focus:outline-none font-mono"
                       />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveInsertTarget(`opt_${opt}`);
+                            handleEnglishInsert('', true, '<u>', '</u>', `opt_${opt}`);
+                          }}
+                          className="px-1.5 py-0.5 rounded text-[10px] font-bold text-amber-400 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-500/30 transition-all active:scale-95"
+                          title={`Gạch chân phát âm <u>...</u> cho phương án ${opt}`}
+                        >
+                          <u>u</u>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveInsertTarget(`opt_${opt}`);
+                            handleEnglishInsert('ˈ', false, '', '', `opt_${opt}`);
+                          }}
+                          className="px-1.5 py-0.5 rounded text-[10px] font-bold text-indigo-300 bg-indigo-950/40 hover:bg-indigo-900/50 border border-indigo-500/30 transition-all active:scale-95"
+                          title={`Dấu trọng âm chính ˈ cho phương án ${opt}`}
+                        >
+                          ˈ
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1488,8 +1759,14 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
                     >
                       <span className="text-xs font-black text-indigo-400 uppercase w-5">{opt})</span>
                       <input
+                        ref={(el) => {
+                          inputElementsRef.current[`tf_${opt}`] = el;
+                        }}
                         type="text"
                         value={fmTfStatements[opt]}
+                        onFocus={(e) => handleRegisterFocus(`tf_${opt}`, e)}
+                        onBlur={(e) => handleRegisterBlur(`tf_${opt}`, e)}
+                        onSelect={handleRegisterSelect}
                         onChange={(e) =>
                           setFmTfStatements({ ...fmTfStatements, [opt]: e.target.value })
                         }
@@ -1526,10 +1803,16 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
                     Đáp Án Chuẩn Của Câu Hỏi Trả Lời Ngắn
                   </label>
                   <input
+                    ref={(el) => {
+                      inputElementsRef.current['short'] = el;
+                    }}
                     type="text"
                     value={fmShortAnswer}
+                    onFocus={(e) => handleRegisterFocus('short', e)}
+                    onBlur={(e) => handleRegisterBlur('short', e)}
+                    onSelect={handleRegisterSelect}
                     onChange={(e) => setFmShortAnswer(e.target.value)}
-                    placeholder="Nhập giá trị hoặc từ khóa đáp án đúng... VD: 20 hoặc 3sqrt(2)"
+                    placeholder="Nhập giá trị hoặc từ khóa đáp án đúng... VD: 20 hoặc /æ/ hoặc 3sqrt(2)"
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
                   />
                 </div>
@@ -1586,8 +1869,14 @@ d) Số phức liên hợp là $\\bar{z} = -3 + 4i$ - Sai`);
                   Hướng Dẫn Chấm / Gợi Ý Tự Luận
                 </label>
                 <textarea
+                  ref={(el) => {
+                    inputElementsRef.current['guide'] = el;
+                  }}
                   rows={2}
                   value={fmEssayGuide}
+                  onFocus={(e) => handleRegisterFocus('guide', e)}
+                  onBlur={(e) => handleRegisterBlur('guide', e)}
+                  onSelect={handleRegisterSelect}
                   onChange={(e) => setFmEssayGuide(e.target.value)}
                   placeholder="Nhập dàn ý chấm điểm chi tiết..."
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500"
