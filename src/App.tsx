@@ -23,6 +23,7 @@ import {
   subscribeUsers,
   saveUserToCloud,
   deleteUserFromCloud,
+  syncAllLocalDataToCloud,
   DEFAULT_ROOT_ADMIN,
 } from './lib/firebase';
 import { Header } from './components/Header';
@@ -172,21 +173,57 @@ export default function App() {
     // 2. Subscribe to Cloud Exams (Real-time Cloud Sync - Single Source of Truth)
     const unsubExams = subscribeExams((cloudExams) => {
       if (cloudExams && Array.isArray(cloudExams)) {
-        setExams(cloudExams);
+        if (cloudExams.length > 0) {
+          setExams(cloudExams);
+          setStorageItem(STORAGE_KEYS.EXAMS, cloudExams);
+        } else {
+          // Cloud has 0 exams. Check if this device has existing exams to push to cloud
+          const local = getStorageItem<Exam[]>(STORAGE_KEYS.EXAMS, []);
+          if (local && local.length > 0) {
+            console.log('[Cloud Sync] Bootstrapping local exams to Firestore Cloud...');
+            local.forEach((ex) => saveExamToCloud(ex));
+            setExams(local);
+          } else {
+            setExams([]);
+          }
+        }
       }
     });
 
     // 3. Subscribe to Cloud Question Bank (Real-time Cloud Sync - Single Source of Truth)
     const unsubBank = subscribeQuestionBank((cloudBank) => {
       if (cloudBank && Array.isArray(cloudBank)) {
-        setQuestionBank(cloudBank);
+        if (cloudBank.length > 0) {
+          setQuestionBank(cloudBank);
+          setStorageItem(STORAGE_KEYS.QBANK, cloudBank);
+        } else {
+          const local = getStorageItem<Question[]>(STORAGE_KEYS.QBANK, []);
+          if (local && local.length > 0) {
+            console.log('[Cloud Sync] Bootstrapping local question bank to Firestore Cloud...');
+            local.forEach((q) => saveQuestionToCloud(q));
+            setQuestionBank(local);
+          } else {
+            setQuestionBank([]);
+          }
+        }
       }
     });
 
     // 4. Subscribe to Cloud Exam Results (Real-time student submissions)
     const unsubResults = subscribeExamResults((cloudResults) => {
       if (cloudResults && Array.isArray(cloudResults)) {
-        setResults(cloudResults);
+        if (cloudResults.length > 0) {
+          setResults(cloudResults);
+          setStorageItem(STORAGE_KEYS.RESULTS, cloudResults);
+        } else {
+          const local = getStorageItem<ExamResult[]>(STORAGE_KEYS.RESULTS, []);
+          if (local && local.length > 0) {
+            local.forEach((res) => submitExamResultToCloud(res));
+            setResults(local);
+          } else {
+            setResults([]);
+          }
+        }
       }
     });
 
@@ -194,6 +231,7 @@ export default function App() {
     const unsubUsers = subscribeUsers((cloudUsers) => {
       if (cloudUsers && Array.isArray(cloudUsers) && cloudUsers.length > 0) {
         setUsers(cloudUsers);
+        setStorageItem(STORAGE_KEYS.USERS, cloudUsers);
       }
     });
 
@@ -255,6 +293,16 @@ export default function App() {
       if (e.key === STORAGE_KEYS.DRAFT_QUESTIONS && e.newValue) {
         try {
           setDraftingQuestions(JSON.parse(e.newValue));
+        } catch {}
+      }
+      if (e.key === STORAGE_KEYS.CURRENT_USER) {
+        try {
+          setCurrentUser(e.newValue ? JSON.parse(e.newValue) : null);
+        } catch {}
+      }
+      if (e.key === STORAGE_KEYS.IS_ADMIN) {
+        try {
+          setIsAdmin(e.newValue ? JSON.parse(e.newValue) : false);
         } catch {}
       }
       if (e.key === STORAGE_KEYS.USERS && e.newValue) {
@@ -537,6 +585,23 @@ export default function App() {
     reader.readAsText(file);
   };
 
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+
+  const handleForceCloudSync = async () => {
+    setIsSyncingCloud(true);
+    try {
+      const stats = await syncAllLocalDataToCloud(exams, questionBank, results, users);
+      showToast(
+        `Đã đồng bộ trực tuyến thành công: ${stats.examsSynced} đề thi, ${stats.questionsSynced} câu hỏi, ${stats.resultsSynced} kết quả lên Đám Mây! Mọi thiết bị khác có thể truy cập ngay lập tức.`,
+        'success'
+      );
+    } catch {
+      showToast('Đồng bộ đám mây gặp sự cố, vui lòng kiểm tra kết nối mạng!', 'error');
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
   return (
     <div
       className={`min-h-screen flex flex-col transition-colors duration-200 ${
@@ -619,6 +684,8 @@ export default function App() {
               setAiManageExam(ex);
               setIsAiManageCloneOpen(true);
             }}
+            onForceCloudSync={handleForceCloudSync}
+            isSyncingCloud={isSyncingCloud}
             showToast={showToast}
           />
         )}
