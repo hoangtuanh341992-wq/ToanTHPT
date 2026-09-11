@@ -96,15 +96,7 @@ export function subscribeExams(callback: (exams: Exam[]) => void): () => void {
     colRef,
     async (snapshot) => {
       if (snapshot.empty) {
-        // Seed initial sample exams if cloud is completely empty
-        try {
-          for (const exam of initialExams) {
-            await setDoc(doc(db, COLLECTIONS.EXAMS, exam.id), exam);
-          }
-        } catch (e) {
-          console.warn('[Firebase] Seeding initial exams error:', e);
-        }
-        callback(initialExams);
+        callback([]);
         return;
       }
 
@@ -206,15 +198,7 @@ export function subscribeQuestionBank(callback: (questions: Question[]) => void)
     colRef,
     async (snapshot) => {
       if (snapshot.empty) {
-        // Seed initial sample question bank
-        try {
-          for (const q of initialQuestionBank) {
-            await setDoc(doc(db, COLLECTIONS.QBANK, q.id), q);
-          }
-        } catch (e) {
-          console.warn('[Firebase] Seeding initial qbank error:', e);
-        }
-        callback(initialQuestionBank);
+        callback([]);
         return;
       }
 

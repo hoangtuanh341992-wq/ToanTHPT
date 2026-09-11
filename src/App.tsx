@@ -169,33 +169,17 @@ export default function App() {
       }
     });
 
-    // 2. Subscribe to Cloud Exams - SMART MERGE TO PREVENT OVERWRITING LOCAL EXAMS
+    // 2. Subscribe to Cloud Exams (Real-time Cloud Sync - Single Source of Truth)
     const unsubExams = subscribeExams((cloudExams) => {
       if (cloudExams && Array.isArray(cloudExams)) {
-        setExams((currentLocalExams) => {
-          const cloudIds = new Set(cloudExams.map((e) => e.id));
-          const pendingSync = currentLocalExams.filter((e) => !cloudIds.has(e.id));
-          if (pendingSync.length > 0) {
-            // Re-sync any unsynced local exams to cloud in background
-            pendingSync.forEach((ex) => saveExamToCloud(ex));
-          }
-          return [...pendingSync, ...cloudExams];
-        });
+        setExams(cloudExams);
       }
     });
 
-    // 3. Subscribe to Cloud Question Bank - SMART MERGE TO PREVENT OVERWRITING LOCAL BANK
+    // 3. Subscribe to Cloud Question Bank (Real-time Cloud Sync - Single Source of Truth)
     const unsubBank = subscribeQuestionBank((cloudBank) => {
       if (cloudBank && Array.isArray(cloudBank)) {
-        setQuestionBank((currentLocalBank) => {
-          const cloudIds = new Set(cloudBank.map((q) => q.id));
-          const pendingSync = currentLocalBank.filter((q) => !cloudIds.has(q.id));
-          if (pendingSync.length > 0) {
-            // Re-sync any unsynced local questions to cloud in background
-            pendingSync.forEach((q) => saveQuestionToCloud(q));
-          }
-          return [...pendingSync, ...cloudBank];
-        });
+        setQuestionBank(cloudBank);
       }
     });
 
@@ -469,7 +453,11 @@ export default function App() {
   };
 
   const handleDeleteExam = (id: string) => {
-    setExams((prev) => prev.filter((e) => e.id !== id));
+    setExams((prev) => {
+      const updated = prev.filter((e) => e.id !== id);
+      setStorageItem(STORAGE_KEYS.EXAMS, updated);
+      return updated;
+    });
     deleteExamFromCloud(id);
     showToast('Đã xóa đề thi khỏi hệ thống đám mây', 'info');
   };
@@ -714,12 +702,22 @@ export default function App() {
           setEditingDraftIndex(draftingQuestions.length);
           setCurrentTab('create');
         }}
-        onDelete={(index) => {
-          const target = questionBank[index];
-          if (target) {
-            deleteQuestionFromCloud(target.id);
+        onDelete={(index, questionId) => {
+          const targetId = questionId || questionBank[index]?.id;
+          if (targetId) {
+            deleteQuestionFromCloud(targetId);
+            setQuestionBank((prev) => {
+              const updated = prev.filter((q) => q.id !== targetId);
+              setStorageItem(STORAGE_KEYS.QBANK, updated);
+              return updated;
+            });
+          } else {
+            setQuestionBank((prev) => {
+              const updated = prev.filter((_, i) => i !== index);
+              setStorageItem(STORAGE_KEYS.QBANK, updated);
+              return updated;
+            });
           }
-          setQuestionBank((prev) => prev.filter((_, i) => i !== index));
           showToast('Đã xóa câu hỏi khỏi ngân hàng đám mây', 'info');
         }}
         onOpenAIClone={(q) => {
