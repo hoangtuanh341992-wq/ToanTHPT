@@ -25,7 +25,7 @@ interface QuestionBankModalProps {
   currentUser?: UserAccount | null;
   onAddToDraft: (q: Question) => void;
   onEditInDraft: (q: Question) => void;
-  onDelete: (index: number) => void;
+  onDelete: (index: number, questionId?: string) => void;
   onSaveEntireBankToDraft?: () => void;
   onOpenAIClone?: (q: Question) => void;
 }
@@ -292,7 +292,7 @@ export const QuestionBankModal: React.FC<QuestionBankModalProps> = ({
                       </button>
                       {canDelete ? (
                         <button
-                          onClick={() => onDelete(originalIndex)}
+                          onClick={() => onDelete(originalIndex, q.id)}
                           className="bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1"
                           title={isSuperAdmin ? 'Xóa khỏi ngân hàng (Quyền Admin)' : 'Xóa câu hỏi của bạn'}
                         >
